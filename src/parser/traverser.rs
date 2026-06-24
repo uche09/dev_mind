@@ -38,6 +38,7 @@ pub fn collect_rust_files(root: &str, ignore: &GlobSet) -> anyhow::Result<Vec<St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
 
     #[test]
     fn ignore_pattern_match_target_dir() -> anyhow::Result<()> {
@@ -50,5 +51,20 @@ mod tests {
         assert!(set.is_match("src/mind.toml"));
 
         Ok(())
+    }
+
+    #[test]
+    fn returns_rust_files() {
+        let root = env!("CARGO_MANIFEST_DIR");
+        let config = Config::load(&format!("{}/mind.toml", root)).unwrap();
+        let ignore = build_ignore_set(&config.ignore).unwrap();
+
+        let rust_files = collect_rust_files(root, &ignore).unwrap();
+
+        assert!(rust_files.contains(&format!("{root}/src/main.rs")));
+        assert!(rust_files.contains(&format!("{root}/src/config.rs")));
+        assert!(!rust_files.contains(&format!("{root}/mind.toml")));
+        assert!(!rust_files.contains(&format!("{root}/Cargo.toml")));
+        
     }
 }
