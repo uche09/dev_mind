@@ -24,5 +24,5 @@ pub enum Commands {
 
         #[arg(short, long, default_value_t = 5)]
         n: usize,
-    }
+    },
 }
