@@ -1,6 +1,6 @@
 use std::fmt::Display;
 use syn::{spanned::Spanned, visit::{self, Visit}};
-use crate::utils::{extract_doc_comment, hash::hash_raw_code};
+use crate::utils::{helper, hash::hash_raw_code};
 
 
 pub enum ChunkKind {
@@ -10,6 +10,7 @@ pub enum ChunkKind {
     Enum,
     Method,
     TraitMethod,
+    Test,
 }
 
 impl Display for ChunkKind {
@@ -21,6 +22,7 @@ impl Display for ChunkKind {
             Self::Struct => write!(f, "Struct"),
             Self::Trait => write!(f, "Trait"),
             Self::TraitMethod => write!(f, "Trait Method"),
+            Self::Test => write!(f, "Test function"),
         }
     }
 }
@@ -58,6 +60,7 @@ impl Display for CodeChunk {
 pub struct ChunkVisitor<'a> {
     pub lines: &'a [&'a str],
     pub file_path: &'a str,
+    pub is_test_mod: bool, // State field to identify visit into test modules #[cfg[test]]
     pub chunks: Vec<CodeChunk>,
 }
 
@@ -70,7 +73,7 @@ impl<'a> ChunkVisitor<'a> {
             kind,
             item_name: name.into(),
             // start_line: start, end_line: end, 
-            doc_comment: extract_doc_comment(attrs),
+            doc_comment: helper::extract_doc_comment(attrs),
             content_hash: hash_raw_code(&raw_code),
             raw_code,
         });
@@ -79,7 +82,10 @@ impl<'a> ChunkVisitor<'a> {
 
 impl<'a> Visit<'a> for ChunkVisitor<'a> {
     fn visit_item_fn(&mut self, i: &'a syn::ItemFn) {
-        self.push(i.span(), &i.sig.ident.to_string(), ChunkKind::Function, &i.attrs);
+        // Mark all functions in #[cfg(test)] test module as ChunkKind::Test
+        // including helper functions without the #[test] attribute.
+        let kind = if self.is_test_mod {ChunkKind::Test} else {ChunkKind::Function};
+        self.push(i.span(), &i.sig.ident.to_string(), kind, &i.attrs);
     }
 
     fn visit_item_struct(&mut self, i: &'a syn::ItemStruct) {
@@ -103,6 +109,14 @@ impl<'a> Visit<'a> for ChunkVisitor<'a> {
         self.push(i.span(), &i.sig.ident.to_string(), ChunkKind::TraitMethod, &i.attrs);
         visit::visit_trait_item_fn(self, i);
     }
+
+    fn visit_item_mod(&mut self, i: &'a syn::ItemMod) {
+        // flip one State field when in a test module
+        self.is_test_mod = helper::is_cfg_test_mod(&i.attrs);
+
+        visit::visit_item_mod(self, i);
+        self.is_test_mod = false; // revert State field
+    }
 }
 
 
@@ -117,6 +131,7 @@ mod tests {
         let mut visitor = ChunkVisitor {
             lines: &lines,
             file_path: "/",
+            is_test_mod: false,
             chunks: vec![]
         };
 

@@ -1,4 +1,4 @@
-use syn::{Attribute, Expr, ExprLit, Lit};
+use syn::{Attribute, Expr, ExprLit, Lit, Meta};
 
 pub fn extract_doc_comment(attrs: &[Attribute]) -> Option<String> {
     let docs: Vec<String> = attrs
@@ -6,7 +6,7 @@ pub fn extract_doc_comment(attrs: &[Attribute]) -> Option<String> {
         .filter(|attr| attr.path().is_ident("doc"))
         .filter_map(|attr| {
             match &attr.meta {
-                syn::Meta::NameValue(nv) => {
+                Meta::NameValue(nv) => {
                     match &nv.value {
                         Expr::Lit(ExprLit {
                             lit: Lit::Str(s),
@@ -25,4 +25,13 @@ pub fn extract_doc_comment(attrs: &[Attribute]) -> Option<String> {
     } else {
         Some(docs.join("\n"))
     }
+}
+
+pub fn is_cfg_test_mod(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("cfg")
+            && attr.parse_args::<Meta>()
+                .map(|m| m.path().is_ident("test"))
+                .unwrap_or(false)
+    })
 }

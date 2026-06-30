@@ -11,6 +11,7 @@ pub fn parse_file(path: &str) -> anyhow::Result<Vec<CodeChunk>> {
     let mut visitor = ChunkVisitor {
         lines: &lines,
         file_path: path,
+        is_test_mod: false,
         chunks: vec![]
     };
 
