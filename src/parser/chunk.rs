@@ -94,6 +94,7 @@ impl<'a> Visit<'a> for ChunkVisitor<'a> {
 
     fn visit_item_trait(&mut self, i: &'a syn::ItemTrait) {
         self.push(i.span(), &i.ident.to_string(), ChunkKind::Trait, &i.attrs);
+        visit::visit_item_trait(self, i);
     }
 
     fn visit_item_enum(&mut self, i: &'a syn::ItemEnum) {
@@ -198,5 +199,70 @@ mod tests {
             "fn bad_code( {"
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn tags_fn_inside_cfg_test_mod_as_test() -> anyhow::Result<()> {
+        let src = r#"
+            #[cfg(test)]
+            mod tests {
+                fn helper_function() {}
+                
+                #[test]
+                fn nested_test() { assert!(true); }
+            }
+        "#;
+        let chunks = parse_str(src)?;
+        let nested = chunks.iter().find(|c| c.item_name == "nested_test").unwrap();
+        let helper = chunks.iter().find(|c| c.item_name == "helper_function").unwrap();
+        assert!(matches!(nested.kind, ChunkKind::Test));
+        assert!(matches!(helper.kind, ChunkKind::Test));
+        Ok(())
+    }
+
+    #[test]
+    fn does_not_misfire_on_unrelated_cfg_attribute() -> anyhow::Result<()> {
+        // is_cfg_test_mod must not get fooled by a non-"test" cfg condition
+        let src = r#"
+            #[cfg(target_os = "linux")]
+            fn linux_only() {}
+        "#;
+        let chunks = parse_str(src)?;
+        let chunk = chunks.iter().find(|c| c.item_name == "linux_only").unwrap();
+        assert!(!matches!(chunk.kind, ChunkKind::Test));
+        Ok(())
+    }
+
+    #[test]
+    fn detects_correct_cfg_test_mod_attribute() -> anyhow::Result<()> {
+        let item: syn::ItemMod = syn::parse_str("#[cfg(test)] mod tests {}")?;
+        assert!(helper::is_cfg_test_mod(&item.attrs));
+
+        let item2: syn::ItemMod = syn::parse_str(r#"#[cfg(feature = "x")] mod foo {}"#)?;
+        assert!(!helper::is_cfg_test_mod(&item2.attrs));
+        Ok(())
+    }
+
+    #[test]
+    fn captures_trait_definition_and_its_methods() -> anyhow::Result<()> {
+        let src = r#"
+            trait Retryable {
+                fn max_attempts(&self) -> u32;
+                fn retry(&self) -> bool {
+                    self.max_attempts() > 0
+                }
+            }
+        "#;
+        let chunks = parse_str(src)?;
+
+        let trait_chunk = chunks.iter().find(|c| c.item_name == "Retryable").unwrap();
+        assert!(matches!(trait_chunk.kind, ChunkKind::Trait));
+
+        let sig_only = chunks.iter().find(|c| c.item_name == "max_attempts").unwrap();
+        assert!(matches!(sig_only.kind, ChunkKind::TraitMethod)); // or a dedicated TraitMethod variant if you add one
+
+        let default_impl = chunks.iter().find(|c| c.item_name == "retry").unwrap();
+        assert!(default_impl.raw_code.contains("self.max_attempts() > 0"));
+        Ok(())
     }
 }
