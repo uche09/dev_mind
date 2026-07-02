@@ -34,6 +34,7 @@ pub struct CodeChunk {
     // pub start_line: usize,
     // pub end_line: usize,
     pub doc_comment: Option<String>,
+    pub comments: Option<String>,
     pub raw_code: String,
     pub content_hash: String,
 }
@@ -41,11 +42,12 @@ pub struct CodeChunk {
 impl CodeChunk {
     pub fn build_embedding_text(&self) -> String {
         format!(
-            "File: {}\n{}: {}\n{}\n\n{}",
+            "File: {}\n{}: {}\nComments: {}\nComments: {}\n\n{}",
             self.file_path,
             self.kind,
             self.item_name,
             self.doc_comment.clone().unwrap_or_default(),
+            self.comments.clone().unwrap_or_default(),
             self.raw_code
         )
     }
@@ -74,6 +76,7 @@ impl<'a> ChunkVisitor<'a> {
             item_name: name.into(),
             // start_line: start, end_line: end, 
             doc_comment: helper::extract_doc_comment(attrs),
+            comments: helper::extract_regular_comments(&self.lines[start -1..end]),
             content_hash: hash_raw_code(&raw_code),
             raw_code,
         });
@@ -92,6 +95,9 @@ impl<'a> Visit<'a> for ChunkVisitor<'a> {
         self.push(i.span(), &i.ident.to_string(), ChunkKind::Struct, &i.attrs);
     }
 
+    // Capturing Trait definition might lead to raw code duplication as `visit_trait_item_fn()`
+    // would also capture individual trait function code which are already captured
+    // by with the trait definition with this function
     fn visit_item_trait(&mut self, i: &'a syn::ItemTrait) {
         self.push(i.span(), &i.ident.to_string(), ChunkKind::Trait, &i.attrs);
         visit::visit_item_trait(self, i);
@@ -112,7 +118,7 @@ impl<'a> Visit<'a> for ChunkVisitor<'a> {
     }
 
     fn visit_item_mod(&mut self, i: &'a syn::ItemMod) {
-        // flip one State field when in a test module
+        // flip on State field when in a test module
         self.is_test_mod = helper::is_cfg_test_mod(&i.attrs);
 
         visit::visit_item_mod(self, i);
