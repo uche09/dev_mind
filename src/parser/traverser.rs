@@ -65,6 +65,5 @@ mod tests {
         assert!(rust_files.contains(&format!("{root}/src/config.rs")));
         assert!(!rust_files.contains(&format!("{root}/mind.toml")));
         assert!(!rust_files.contains(&format!("{root}/Cargo.toml")));
-        
     }
 }

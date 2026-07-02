@@ -16,7 +16,6 @@ fn main() -> anyhow::Result<()> {
 
     let ignore = build_ignore_set(&conf.ignore)?;
     let rust_files = collect_rust_files(project_root, &ignore)?;
-    
 
     // println!(
     //     "{} Rust files available \nRust files: {:?}",
@@ -25,10 +24,10 @@ fn main() -> anyhow::Result<()> {
     // );
 
     let mut chunks = vec![];
-    rust_files.iter()
+    rust_files
+        .iter()
         .filter_map(|p| parser::parse_file(p).ok())
         .for_each(|mut v| chunks.append(&mut v));
-
 
     println!("##### Code Chunks #####\n\n");
     for chunk in chunks {

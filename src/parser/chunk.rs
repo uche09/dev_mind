@@ -1,7 +1,9 @@
+use crate::utils::{hash::hash_raw_code, helper};
 use std::fmt::Display;
-use syn::{spanned::Spanned, visit::{self, Visit}};
-use crate::utils::{helper, hash::hash_raw_code};
-
+use syn::{
+    spanned::Spanned,
+    visit::{self, Visit},
+};
 
 pub enum ChunkKind {
     Function,
@@ -67,16 +69,22 @@ pub struct ChunkVisitor<'a> {
 }
 
 impl<'a> ChunkVisitor<'a> {
-    fn push(&mut self, span: proc_macro2::Span, name: &str, kind: ChunkKind, attrs: &[syn::Attribute]) {
+    fn push(
+        &mut self,
+        span: proc_macro2::Span,
+        name: &str,
+        kind: ChunkKind,
+        attrs: &[syn::Attribute],
+    ) {
         let (start, end) = (span.start().line, span.end().line);
-        let raw_code = self.lines[start -1..end].join("\n");
-        self.chunks.push(CodeChunk { 
-            file_path: self.file_path.into(), 
+        let raw_code = self.lines[start - 1..end].join("\n");
+        self.chunks.push(CodeChunk {
+            file_path: self.file_path.into(),
             kind,
             item_name: name.into(),
-            // start_line: start, end_line: end, 
+            // start_line: start, end_line: end,
             doc_comment: helper::extract_doc_comment(attrs),
-            comments: helper::extract_regular_comments(&self.lines[start -1..end]),
+            comments: helper::extract_regular_comments(&self.lines[start - 1..end]),
             content_hash: hash_raw_code(&raw_code),
             raw_code,
         });
@@ -87,7 +95,11 @@ impl<'a> Visit<'a> for ChunkVisitor<'a> {
     fn visit_item_fn(&mut self, i: &'a syn::ItemFn) {
         // Mark all functions in #[cfg(test)] test module as ChunkKind::Test
         // including helper functions without the #[test] attribute.
-        let kind = if self.is_test_mod {ChunkKind::Test} else {ChunkKind::Function};
+        let kind = if self.is_test_mod {
+            ChunkKind::Test
+        } else {
+            ChunkKind::Function
+        };
         self.push(i.span(), &i.sig.ident.to_string(), kind, &i.attrs);
     }
 
@@ -108,12 +120,22 @@ impl<'a> Visit<'a> for ChunkVisitor<'a> {
     }
 
     fn visit_impl_item_fn(&mut self, i: &'a syn::ImplItemFn) {
-        self.push(i.span(), &i.sig.ident.to_string(), ChunkKind::Method, &i.attrs);
+        self.push(
+            i.span(),
+            &i.sig.ident.to_string(),
+            ChunkKind::Method,
+            &i.attrs,
+        );
         visit::visit_impl_item_fn(self, i);
     }
 
     fn visit_trait_item_fn(&mut self, i: &'a syn::TraitItemFn) {
-        self.push(i.span(), &i.sig.ident.to_string(), ChunkKind::TraitMethod, &i.attrs);
+        self.push(
+            i.span(),
+            &i.sig.ident.to_string(),
+            ChunkKind::TraitMethod,
+            &i.attrs,
+        );
         visit::visit_trait_item_fn(self, i);
     }
 
@@ -126,12 +148,9 @@ impl<'a> Visit<'a> for ChunkVisitor<'a> {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     fn parse_str(src: &str) -> anyhow::Result<Vec<CodeChunk>> {
         let lines: Vec<&str> = src.lines().collect();
@@ -139,7 +158,7 @@ mod tests {
             lines: &lines,
             file_path: "/",
             is_test_mod: false,
-            chunks: vec![]
+            chunks: vec![],
         };
 
         let file: syn::File = syn::parse_str(src)?;
@@ -201,9 +220,7 @@ mod tests {
 
     #[test]
     fn invalid_rust_file_returns_err_not_panic() {
-        let result = parse_str(
-            "fn bad_code( {"
-        );
+        let result = parse_str("fn bad_code( {");
         assert!(result.is_err());
     }
 
@@ -219,8 +236,14 @@ mod tests {
             }
         "#;
         let chunks = parse_str(src)?;
-        let nested = chunks.iter().find(|c| c.item_name == "nested_test").unwrap();
-        let helper = chunks.iter().find(|c| c.item_name == "helper_function").unwrap();
+        let nested = chunks
+            .iter()
+            .find(|c| c.item_name == "nested_test")
+            .unwrap();
+        let helper = chunks
+            .iter()
+            .find(|c| c.item_name == "helper_function")
+            .unwrap();
         assert!(matches!(nested.kind, ChunkKind::Test));
         assert!(matches!(helper.kind, ChunkKind::Test));
         Ok(())
@@ -264,7 +287,10 @@ mod tests {
         let trait_chunk = chunks.iter().find(|c| c.item_name == "Retryable").unwrap();
         assert!(matches!(trait_chunk.kind, ChunkKind::Trait));
 
-        let sig_only = chunks.iter().find(|c| c.item_name == "max_attempts").unwrap();
+        let sig_only = chunks
+            .iter()
+            .find(|c| c.item_name == "max_attempts")
+            .unwrap();
         assert!(matches!(sig_only.kind, ChunkKind::TraitMethod)); // or a dedicated TraitMethod variant if you add one
 
         let default_impl = chunks.iter().find(|c| c.item_name == "retry").unwrap();
