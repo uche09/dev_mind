@@ -20,7 +20,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad445c56a946d1681f0cbfaa8a4fc08a620ee5ddd000142f890e9eff3c0c187f"
 dependencies = [
- "ahnlich_types 0.3.0",
+ "ahnlich_types",
  "async-trait",
  "fallible_collections",
  "http",
@@ -28,22 +28,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tonic",
-]
-
-[[package]]
-name = "ahnlich_types"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "322683f56aaa8b171fa65679fe7c808e3ba1a50f99e7efa56f868cc576af8ebb"
-dependencies = [
- "ascii85",
- "prost",
- "prost-build",
- "prost-types",
- "serde",
- "tonic",
- "tonic-build",
- "walkdir",
 ]
 
 [[package]]
@@ -713,7 +697,7 @@ name = "mind"
 version = "0.1.0"
 dependencies = [
  "ahnlich_client_rs",
- "ahnlich_types 0.2.2",
+ "ahnlich_types",
  "anyhow",
  "clap",
  "globset",
