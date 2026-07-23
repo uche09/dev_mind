@@ -44,7 +44,7 @@ pub struct CodeChunk {
 impl CodeChunk {
     pub fn build_embedding_text(&self) -> String {
         format!(
-            "File: {}\n{}: {}\nComments: {}\nComments: {}\n\n{}",
+            "File: {}\n{}: {}\nDoc Comment: {}\nComments: \n{}\n\nCode Snippet:\n{}",
             self.file_path,
             self.kind,
             self.item_name,
