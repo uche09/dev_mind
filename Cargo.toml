@@ -17,3 +17,4 @@ ahnlich_client_rs = "0.3.0"
 ahnlich_types = "=0.3.0"
 toml = "1.1"
 globset = "0.4"
+rustc_lexer = { package = "ra-ap-rustc_lexer", version = "0.174.0"}
