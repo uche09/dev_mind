@@ -38,12 +38,22 @@ impl CodeIndex {
 
     pub async fn add_chuck(&self, chunk: &CodeChunk) -> anyhow::Result<()> {
         let text = chunk.build_embedding_text();
+        let mut meta_data = HashMap::new();
+        let meta_data_list = vec![
+            parse_metadata("kind", &format!("{}", chunk.kind)),
+            parse_metadata("url", &chunk.file_path),
+            parse_metadata(
+                "scope", &format!("{} {}", chunk.start_line, chunk.end_line)
+            ),
+            parse_metadata("hash", &chunk.content_hash),
+        ];
+        meta_data.extend(meta_data_list.into_iter());
 
         let data_to_store = Set {
             store: self.store.clone(),
             inputs: vec![AiStoreEntry {
                 key: Some(StoreInput { value: Some(AiStoreValue::RawString(text)) }),
-                value: Some(StoreValue { value: HashMap::new() })
+                value: Some(StoreValue { value: meta_data })
             }],
             preprocess_action: PreprocessAction::NoPreprocessing as i32, 
             execution_provider: None,
