@@ -1,3 +1,6 @@
+use colored::*;
+use std::fmt::Display;
+
 use crate::embeddings::metadata::Metadata;
 use ahnlich_types::{
     ai::server::GetSimNEntry,
@@ -5,6 +8,7 @@ use ahnlich_types::{
 };
 
 pub struct SimNHit {
+    pub name: String,
     pub kind: String,
     pub path: String,
     pub similarity: f32,
@@ -38,6 +42,8 @@ impl TryFrom<GetSimNEntry> for SimNHit {
         }
 
         let new_hit = Self {
+            name: metadata_value_to_string(value.value.get(&Metadata::Name.to_string()))
+                .unwrap_or_default(),
             kind: metadata_value_to_string(value.value.get(&Metadata::Kind.to_string()))
                 .unwrap_or_default(),
             path: metadata_value_to_string(value.value.get(&Metadata::Path.to_string()))
@@ -51,20 +57,35 @@ impl TryFrom<GetSimNEntry> for SimNHit {
     }
 }
 
+impl Display for SimNHit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let header = format!(
+            "similarity {:.3} -------", self.similarity
+        );
+        let start_line = self.start_line.map_or("_".to_string(), |l| l.to_string());
+        let end_line = self.end_line.map_or("_".to_string(), |l| l.to_string());
+
+        write!(f, "{}", header.cyan())?;
+        write!(f, 
+            "   {}  {}",
+            format!("{}: {}-{}", self.path, start_line, end_line).green().bold(),
+            format!("[{}]", self.kind).dimmed()
+        )?;
+
+        write!(f, " {}", self.name.yellow().bold())
+    }
+}
+
 fn metadata_value_to_string(mv: Option<&MetadataValue>) -> Option<String> {
     match mv {
         Some(mt) => match &mt.value {
             Some(Value::RawString(txt)) => {
-                return Some(txt.to_owned());
+                Some(txt.to_owned())
             }
-            None => {
-                return None;
-            }
-            _ => {
-                return None;
-            }
+            None => None,
+            _ => None
         },
 
-        None => return None,
+        None => None,
     }
 }
