@@ -5,6 +5,7 @@ pub struct Config {
     pub store: String,
     #[serde(default = "default_ignore")]
     pub ignore: Vec<String>,
+    pub ahnlich_addr: String,
 }
 
 fn default_ignore() -> Vec<String> {
@@ -17,6 +18,7 @@ impl Config {
             return Ok(Config {
                 store: "mind_code".to_string(),
                 ignore: default_ignore(),
+                ahnlich_addr: "localhost:1370".to_string(),
             });
         }
 

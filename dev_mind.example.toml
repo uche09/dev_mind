@@ -1,2 +1,3 @@
 store = "devmind_code"
 ignore = ["**/target", "**/*.lock", "**/*.toml, tests/**"]
+ahnlich_addr = "localhost:1370"
