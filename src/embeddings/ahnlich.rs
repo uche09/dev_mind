@@ -15,7 +15,6 @@ use ahnlich_types::{
     metadata::{MetadataValue, metadata_value::Value as MetaValue},
 };
 use std::collections::HashMap;
-// use ahnlich_types::ai::server::GetSimN;
 
 pub struct CodeIndex {
     client: AiClient,
@@ -26,10 +25,21 @@ impl CodeIndex {
     pub async fn new(addr: &str, store: &str) -> anyhow::Result<Self> {
         let client = AiClient::new(addr.to_string()).await?;
 
-        client
+        Ok(Self {
+            client,
+            store: store.to_string(),
+        })
+    }
+
+    pub async fn ping(&self) -> anyhow::Result<Pong> {
+        Ok(self.client.ping(None).await?)
+    }
+
+    pub async fn create_store(&self) -> anyhow::Result<()> {
+        self.client
             .create_store(
                 CreateStore {
-                    store: store.to_string(),
+                    store: self.store.to_owned(),
                     query_model: AiModel::JinaEmbeddingsV2BaseCode as i32,
                     index_model: AiModel::JinaEmbeddingsV2BaseCode as i32,
                     predicates: vec![], // likely store file path and code lines later
@@ -40,14 +50,7 @@ impl CodeIndex {
                 None,
             )
             .await?;
-        Ok(Self {
-            client,
-            store: store.to_string(),
-        })
-    }
-
-    pub async fn ping(&self) -> anyhow::Result<Pong> {
-        Ok(self.client.ping(None).await?)
+        Ok(())
     }
 
     pub async fn add_chuck(&self, chunk: &CodeChunk) -> anyhow::Result<()> {
