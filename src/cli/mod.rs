@@ -1,3 +1,5 @@
+use std::{fs::canonicalize, path::PathBuf,};
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -14,8 +16,12 @@ pub enum Commands {
 
     /// Walk the codebase, parse it, and push embeddings to Ahnlich
     Index {
-        #[arg(default_value = ".")]
-        path: String,
+        #[arg(
+            long, short,
+            default_value = ".",
+            value_parser = parse_absolute_path
+        )]
+        path: PathBuf,
     },
 
     /// Query your codebase
@@ -25,4 +31,9 @@ pub enum Commands {
         #[arg(short, long, default_value_t = 5)]
         n: usize,
     },
+}
+
+fn parse_absolute_path(input: &str) -> Result<PathBuf, String> {
+    canonicalize(input)
+        .map_err(|e| format!("Failed to resolve path for '{}': \n{}", input, e))
 }
