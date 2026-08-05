@@ -1,0 +1,2 @@
+store = "devmind_code"
+ignore = ["**/target", "**/*.lock", "**/*.toml, tests/**"]
