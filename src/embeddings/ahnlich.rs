@@ -54,6 +54,7 @@ impl CodeIndex {
         let text = chunk.build_embedding_text();
         let mut meta_data = HashMap::new();
         let meta_data_list = vec![
+            parse_metadata(Metadata::Name, &chunk.item_name),
             parse_metadata(Metadata::Kind, &format!("{}", chunk.kind)),
             parse_metadata(Metadata::Path, &chunk.file_path),
             parse_metadata(
