@@ -18,3 +18,5 @@ ahnlich_types = "=0.3.0"
 toml = "1.1"
 globset = "0.4"
 rustc_lexer = { package = "ra-ap-rustc_lexer", version = "0.174.0"}
+colored = "2"
+indicatif = "0.17"
