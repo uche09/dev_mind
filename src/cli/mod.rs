@@ -26,6 +26,7 @@ pub enum Commands {
 
     /// Query your codebase
     Ask {
+        #[arg(long, short)]
         query: String,
 
         #[arg(short, long, default_value_t = 5)]
