@@ -16,7 +16,7 @@ impl Config {
     pub fn load(path: &str) -> anyhow::Result<Self> {
         if !std::path::Path::new(path).exists() {
             return Ok(Config {
-                store: "mind_code".to_string(),
+                store: "devmind_code".to_string(),
                 ignore: default_ignore(),
                 ahnlich_addr: "localhost:1370".to_string(),
             });
