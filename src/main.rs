@@ -72,7 +72,24 @@ async fn main() -> anyhow::Result<()> {
                 rust_files.len()
             ));
         },
-        _ => {},
+        Commands::Ask { query, n } => {
+            let query = query.trim();
+            if query.is_empty() {
+                println!("Please ask a valid question");
+                return Ok(())
+            }
+
+            let hits = ahnlich_ai_proxy.ask(query, n).await?;
+
+            if hits.is_empty() {
+                println!("{}", "No matches. Try rephrasing, or run `devmind index` first.".yellow());
+                return Ok(());
+            }
+            
+            for (i, hit) in hits.iter().enumerate() {
+                println!("- #{}    {}", i +1, hit)
+            }
+        },
     }
     
 
