@@ -7,6 +7,7 @@ pub enum Metadata {
     Path,
     Scope,
     Hash,
+    RawCode,
 }
 
 impl Display for Metadata {
@@ -16,7 +17,8 @@ impl Display for Metadata {
             Self::Kind => write!(f, "kind"),
             Self::Path => write!(f, "path"),
             Self::Scope => write!(f, "scope"),
-            Self::Hash => write!(f, "hash")
+            Self::Hash => write!(f, "hash"),
+            Self::RawCode => write!(f, "raw_code")
         }
     }
 }

@@ -65,6 +65,7 @@ impl CodeIndex {
                 &format!("{} {}", chunk.start_line, chunk.end_line),
             ),
             parse_metadata(Metadata::Hash, &chunk.content_hash),
+            parse_metadata(Metadata::RawCode, &chunk.raw_code),
         ];
         meta_data.extend(meta_data_list.into_iter());
 

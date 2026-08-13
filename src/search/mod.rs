@@ -14,6 +14,7 @@ pub struct SimNHit {
     pub similarity: f32,
     pub start_line: Option<u32>,
     pub end_line: Option<u32>,
+    pub snippet: String,
 }
 
 impl TryFrom<GetSimNEntry> for SimNHit {
@@ -48,6 +49,8 @@ impl TryFrom<GetSimNEntry> for SimNHit {
                 .unwrap_or_default(),
             path: metadata_value_to_string(value.value.get(&Metadata::Path.to_string()))
                 .unwrap_or_default(),
+            snippet: metadata_value_to_string(value.value.get(&Metadata::RawCode.to_string()))
+                .unwrap_or_default(),
             similarity,
             start_line,
             end_line,
@@ -72,7 +75,13 @@ impl Display for SimNHit {
             format!("[{}]", self.kind).dimmed()
         )?;
 
-        write!(f, " {}", self.name.yellow().bold())
+        write!(f, " {}", self.name.yellow().bold())?;
+        writeln!(f)?;
+        
+        for line in preview_code(&self.snippet, 6) {
+            writeln!(f, "     {}", line)?;
+        }
+        writeln!(f)
     }
 }
 
@@ -87,5 +96,18 @@ fn metadata_value_to_string(mv: Option<&MetadataValue>) -> Option<String> {
         },
 
         None => None,
+    }
+}
+
+
+fn preview_code(code: &str, max_line: usize) -> Vec<&str> {
+    let lines: Vec<&str> = code.lines().collect();
+
+    if lines.len() > max_line {
+        let mut prev = lines[..max_line].to_vec();
+        prev.push("     ...");
+        prev
+    } else {
+        lines
     }
 }
