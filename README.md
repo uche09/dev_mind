@@ -1,5 +1,7 @@
 # DevMind
 
+![Demo image](doc/media/demo_img.png)
+
 DevMind is a CLI tool for semantic Rust code search and fast codebase discovery.
 
 ## Why DevMind
