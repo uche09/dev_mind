@@ -17,7 +17,7 @@ use colored::*;
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let conf = Config::load("dev_mind.toml")?;
+    let conf = Config::load(cli.config.as_deref())?;
     let ahnlich_ai_proxy = embeddings::ahnlich::CodeIndex::new(
         &conf.ahnlich_addr, &conf.store
     ).await?;

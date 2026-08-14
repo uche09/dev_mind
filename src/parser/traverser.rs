@@ -37,7 +37,9 @@ pub fn collect_rust_files(root: &str, ignore: &GlobSet) -> anyhow::Result<Vec<St
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::path::Path;
+
+use super::*;
     use crate::config::Config;
 
     #[test]
@@ -56,7 +58,7 @@ mod tests {
     #[test]
     fn returns_rust_files() {
         let root = env!("CARGO_MANIFEST_DIR");
-        let config = Config::load(&format!("{}/mind.toml", root)).unwrap();
+        let config = Config::load(Some(Path::new(&format!("{}/devmind.toml", root)))).unwrap();
         let ignore = build_ignore_set(&config.ignore).unwrap();
 
         let rust_files = collect_rust_files(root, &ignore).unwrap();

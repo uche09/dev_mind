@@ -3,10 +3,14 @@ use std::{fs::canonicalize, path::PathBuf,};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "mind", about = "Semantic code search for your own codebase")]
+#[command(name = "devmind", about = "Semantic code search for your own codebase")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+
+    /// Explicit config file path, overrides global and project config
+    #[arg(long, global = true)]
+    pub config: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]

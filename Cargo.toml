@@ -1,5 +1,5 @@
 [package]
-name = "dev_mind"
+name = "devmind"
 version = "0.1.0"
 edition = "2024"
 
@@ -20,3 +20,4 @@ globset = "0.4"
 rustc_lexer = { package = "ra-ap-rustc_lexer", version = "0.174.0"}
 colored = "2"
 indicatif = "0.17"
+directories = "5"
