@@ -7,6 +7,7 @@ use ahnlich_types::{
     metadata::{MetadataValue, metadata_value::Value},
 };
 
+/// A representation of a single match data from Ahnlich Similarity search result.
 pub struct SimNHit {
     pub name: String,
     pub kind: String,
@@ -19,6 +20,8 @@ pub struct SimNHit {
 
 impl TryFrom<GetSimNEntry> for SimNHit {
     type Error = anyhow::Error;
+
+    /// Converts from Ahnlich Sim Search result type to defined representation type
     fn try_from(value: GetSimNEntry) -> Result<Self, Self::Error> {
         let similarity: f32 = value.similarity.unwrap_or_default().value;
         let value = value.value.ok_or(anyhow::Error::msg("No metadata"))?;
@@ -61,6 +64,8 @@ impl TryFrom<GetSimNEntry> for SimNHit {
 }
 
 impl Display for SimNHit {
+
+    /// Card display for a single match data from Ahnlich similarity search
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let header = format!(
             "similarity {:.3} -------", self.similarity

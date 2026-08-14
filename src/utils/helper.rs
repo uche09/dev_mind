@@ -24,6 +24,19 @@ pub fn extract_doc_comment(attrs: &[Attribute]) -> Option<String> {
 }
 
 pub fn extract_regular_comments(lines: &[&str]) -> Option<String> {
+    /* Extracting regular comment had a challenge:
+    - We only want regular comments - `// ..` or `/* .. */` 
+    - We don't want Doc comment - `//! ..` or `/*! .. */ 
+
+    Pattern matching with strings failed because: 
+    - matching `//` would also capture doc comments `//!`
+    - matching `/ *` would also capture inner doc comments `/ *!` 
+    
+    Hence I resolved to using rust `rustc_lexer` crate (beta version from github) 
+    which uses token to identify and differentiate regular comments from doc comments.
+    Same crate used in the Rust compiler. */
+
+
     let input = lines.join("\n");
     let mut comments = Vec::new();
     let mut pos = 0;

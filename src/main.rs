@@ -12,10 +12,11 @@ use parser::traverser::{build_ignore_set, collect_rust_files};
 use tokio::main;
 use cli::{Cli, Commands};
 use colored::*;
-// use crate::embeddings::ahnlich::CodeIndex;
 
 #[main]
 async fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+
     let conf = Config::load("dev_mind.toml")?;
     let ahnlich_ai_proxy = embeddings::ahnlich::CodeIndex::new(
         &conf.ahnlich_addr, &conf.store
@@ -28,9 +29,6 @@ async fn main() -> anyhow::Result<()> {
             return Err(e);
         }
     }
-
-    let cli = Cli::parse();
-
 
     match cli.command {
         Commands::Init => {
@@ -92,14 +90,6 @@ async fn main() -> anyhow::Result<()> {
         },
     }
     
-
-    // let res = ahnlich_ai_proxy.ask("How is file traversal handled", 3).await?;
-
-
-    // println!("##### Matches #####\n\n");
-    // for entry in res {
-    //     println!("Entry: \n{}\n\n", entry)
-    // }
 
     Ok(())
 }

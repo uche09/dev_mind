@@ -17,7 +17,7 @@ fn is_ignored(entry: &DirEntry, ignore: &GlobSet) -> bool {
     ignore.is_match(rel)
 }
 
-// This function traverses the directory path provided.
+/// This function traverses the directory path provided and filters out ignored files and dir stated in the configuration.
 pub fn collect_rust_files(root: &str, ignore: &GlobSet) -> anyhow::Result<Vec<String>> {
     let root_path = std::path::Path::new(root);
 

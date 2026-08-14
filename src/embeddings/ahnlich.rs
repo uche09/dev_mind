@@ -16,6 +16,7 @@ use ahnlich_types::{
 };
 use std::collections::HashMap;
 
+/// Ahnlich AI client
 pub struct CodeIndex {
     client: AiClient,
     store: String,
@@ -31,10 +32,15 @@ impl CodeIndex {
         })
     }
 
+    /// Test database connection, returns `Ok(Pong)` if connected
     pub async fn ping(&self) -> anyhow::Result<Pong> {
         Ok(self.client.ping(None).await?)
     }
 
+    /// create store on the running ahnlich db via AI proxy.
+    /// 
+    /// Uses the `JinaEmbeddingsV2BaseCode` model for both storage
+    /// and query embeddings.
     pub async fn create_store(&self) -> anyhow::Result<()> {
         self.client
             .create_store(
@@ -42,7 +48,7 @@ impl CodeIndex {
                     store: self.store.to_owned(),
                     query_model: AiModel::JinaEmbeddingsV2BaseCode as i32,
                     index_model: AiModel::JinaEmbeddingsV2BaseCode as i32,
-                    predicates: vec![], // likely store file path and code lines later
+                    predicates: vec![], // metadata key for indexing
                     non_linear_indices: vec![],
                     error_if_exists: false,
                     store_original: false,
@@ -53,6 +59,7 @@ impl CodeIndex {
         Ok(())
     }
 
+    /// Generate and store embeddings via Ahnlich Ai proxy
     pub async fn add_chuck(&self, chunk: &CodeChunk) -> anyhow::Result<()> {
         let text = chunk.build_embedding_text();
         let mut meta_data = HashMap::new();
@@ -87,6 +94,7 @@ impl CodeIndex {
         Ok(())
     }
 
+    /// Embeds query and perform similarity search against stored vectors via Ahnlich Ai proxy.
     pub async fn ask(&self, query: &str, n: usize) -> anyhow::Result<Vec<SimNHit>> {
         let res: server::GetSimN = self
             .client
@@ -119,6 +127,7 @@ fn format_results(res: server::GetSimN) -> Vec<SimNHit> {
         .collect()
 }
 
+/// Converts allowed Metadata key-value pairs unto a tuple of Ahnlich's Metadata Hashmap value.
 pub fn parse_metadata(key: Metadata, value: &str) -> (String, MetadataValue) {
     (
         key.to_string(),

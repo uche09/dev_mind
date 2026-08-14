@@ -5,6 +5,7 @@ use syn::{
     visit::{self, Visit},
 };
 
+/// Scopes extractable Rust construct and structures to these more commonly used
 pub enum ChunkKind {
     Function,
     Struct,
@@ -29,6 +30,7 @@ impl Display for ChunkKind {
     }
 }
 
+/// Representation of a single extracted code construct
 pub struct CodeChunk {
     pub file_path: String,
     pub kind: ChunkKind,
@@ -42,6 +44,7 @@ pub struct CodeChunk {
 }
 
 impl CodeChunk {
+    /// Format embedding text so it makes sense even to a text embedding model.
     pub fn build_embedding_text(&self) -> String {
         format!(
             "File: {}\n{}: {}\nDoc Comment: {}\nComments: \n{}\n\nCode Snippet:\n{}",
@@ -61,6 +64,7 @@ impl Display for CodeChunk {
     }
 }
 
+/// Chunk extractor. Use the `syn` crate to identity rust logical structures and extract them from a rust file.
 pub struct ChunkVisitor<'a> {
     pub lines: &'a [&'a str],
     pub file_path: &'a str,
@@ -109,7 +113,7 @@ impl<'a> Visit<'a> for ChunkVisitor<'a> {
 
     // Capturing Trait definition might lead to raw code duplication as `visit_trait_item_fn()`
     // would also capture individual trait function code which are already captured
-    // by with the trait definition with this function
+    // with the trait definition with this function
     fn visit_item_trait(&mut self, i: &'a syn::ItemTrait) {
         self.push(i.span(), &i.ident.to_string(), ChunkKind::Trait, &i.attrs);
         visit::visit_item_trait(self, i);

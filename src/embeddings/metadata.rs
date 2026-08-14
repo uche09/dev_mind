@@ -1,6 +1,11 @@
 use std::fmt::Display;
 
-
+/// Allowed chunk metadata.
+/// 
+/// These metadata retains and prevent relevant context of the embedded data
+/// from being lost after embedding.
+/// 
+/// They give more condext about the retrived data, rather than just vectors.
 pub enum Metadata {
     Name,
     Kind,
