@@ -5,22 +5,40 @@ mod parser;
 mod utils;
 mod search;
 
+use anyhow::Context;
 use clap::Parser;
 use config::Config;
 use indicatif::{ProgressBar, ProgressStyle};
 use parser::traverser::{build_ignore_set, collect_rust_files};
 use tokio::main;
-use cli::{Cli, Commands};
+use cli::{Cli, Commands, ConfigOptions};
 use colored::*;
 
 #[main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-
     let conf = Config::load(cli.config.as_deref())?;
+
+    // Initialize configuration for first user before before attempting connection to Ahnlich
+    if let Commands::Config { action } = cli.command {
+        match action {
+            cli::ConfigAction::Init { scope, ahnlich_addr, store, ignore, force } => {
+                Config::init(scope, ahnlich_addr, store, ignore, force)?;
+            },
+            cli::ConfigAction::Get { key } => match key {
+                ConfigOptions::AhnlichAddr => println!("ahnlich-addr: {}", conf.ahnlich_addr),
+                ConfigOptions::Store => println!("store: {}", conf.store),
+                ConfigOptions::Ignore => println!("ignore: {}", conf.ignore.join(", "))
+            }
+        }
+
+        return Ok(());
+    };
+
+
     let ahnlich_ai_proxy = embeddings::ahnlich::CodeIndex::new(
         &conf.ahnlich_addr, &conf.store
-    ).await?;
+    ).await.with_context(|| "Failed to connect to Ahnlich AI. Check `ahnlich-addr`".yellow())?;
     
     match ahnlich_ai_proxy.ping().await {
         Ok(_pung) => println!("{}", "Connected to ahnlich".green()),
@@ -88,6 +106,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("- #{}    {}", i +1, hit)
             }
         },
+        Commands::Config { action: _ } => unreachable!(), // Config variant has already been handled above, before Ahnlich connection.
     }
     
 

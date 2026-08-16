@@ -1,11 +1,14 @@
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use directories::ProjectDirs;
+use colored::*;
+use crate::cli::ConfigScope;
 
 #[derive(Deserialize, Debug, Default)]
 struct PartialConfig {
     store: Option<String>,
     ignore: Option<Vec<String>>,
+    #[serde(alias = "ahnlich-addr")]
     ahnlich_addr: Option<String>,
 }
 
@@ -18,6 +21,96 @@ pub struct Config {
 
 
 impl Config {
+    // Create default config files
+    pub fn init(
+        scope: ConfigScope,
+        ahnlich_addr: Option<String>,
+        store: Option<String>,
+        ignore: Vec<String>,
+        force: bool,
+    ) -> anyhow::Result<()> {
+        let defaults = Self::default();
+
+        let addr = ahnlich_addr.unwrap_or_else(|| defaults.ahnlich_addr.clone().unwrap());
+        let store_name = store.unwrap_or_else(|| defaults.store.clone().unwrap());
+        let ignore_patterns = if ignore.is_empty() {
+            defaults.ignore.clone().unwrap()
+        } else {
+            ignore
+        };
+
+        if matches! (scope, ConfigScope::Global | ConfigScope::Both) {
+            let path = Self::global_config_path()
+                .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?;
+            Self::write_template(&path, &Self::global_template(&addr), force)?;
+        }
+
+        if matches! (scope, ConfigScope::Project | ConfigScope::Both) {
+            let path = std::env::current_dir()?.join("devmind.toml");
+            Self::write_template(
+                &path, 
+                &Self::project_template(&store_name, &ignore_patterns),
+                force
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn write_template(path: &Path, content: &str, force: bool) -> anyhow::Result<()> {
+        if path.exists() && !force {
+            println!(
+                "{}",
+                format!("Skipped {} (already exists, use --force to overwrite)", path.display()).yellow()
+            );
+            return Ok(());
+        }
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Atomic write pattern: temp file, then rename,
+        // so that a killed process never leaves a half-written config behind.
+        let tmp_path = path.with_extension("toml.tmp");
+        std::fs::write(&tmp_path, content)?;
+        std::fs::rename(&tmp_path, path)?;
+
+        println!("{}", format!("Wrote {}", path.display()).green());
+        Ok(())
+    }
+
+    fn global_template(ahnlich_addr: &str) -> String {
+        format!(
+r#"# DevMind global config
+# Applies to every project unless overridden by a project-level devmind.toml
+# Location: resolved via XDG_CONFIG_HOME (~/.config/devmind/config.toml on Linux)
+
+ahnlich_addr = "{ahnlich_addr}"
+"#
+        )
+    }
+    fn project_template(store: &str, ignore: &[String]) -> String {
+        let ignore_list = ignore
+            .iter()
+            .map(|p| format!("\"{p}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        format!(
+r#"# DevMind project config
+# Overrides the global config for this project only.
+# Safe to commit to version control.
+
+store = "{store}"
+ignore = [{ignore_list}]
+
+# Uncomment to point this project at a different Ahnlich instance than
+# your global default:
+# ahnlich-addr = "localhost:1370"
+"#
+        )
+    }
     fn default() -> PartialConfig {
         PartialConfig { 
             store: Some("devmind".to_string()),
