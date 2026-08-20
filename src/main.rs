@@ -65,6 +65,7 @@ async fn main() -> anyhow::Result<()> {
             );
 
             let mut total_chunks = 0usize;
+            let mut total_error_chunks = 0usize;
 
             for file in &rust_files {
                 progress_bar.set_message(file.to_owned());
@@ -72,11 +73,14 @@ async fn main() -> anyhow::Result<()> {
                 
                 for chunk in &chunks {
                     if let Err(_e) = ahnlich_ai_proxy.add_chuck(chunk).await {
-                        progress_bar.println(format!("{}\n{}", 
-                            "Store not found.".red(),
-                            "Run Init command first to create store".yellow()
+                        progress_bar.println(format!("{}: {} [{}]   {}", 
+                            "Error pushing chunk".yellow(),
+                            chunk.item_name.dimmed(),
+                            chunk.kind.to_string().dimmed(),
+                            chunk.file_path.yellow()
                         ));
-                        return Ok(())
+                        total_error_chunks += 1;
+                        continue;
                     }
                     total_chunks += 1;
                 }
@@ -84,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
             }
 
             progress_bar.finish_with_message(format!(
-                "Indexed {total_chunks} chunks across {} files",
+                "Indexed {total_chunks} chunks across {} files. Encountered error while indexing {total_error_chunks}.",
                 rust_files.len()
             ));
         },
