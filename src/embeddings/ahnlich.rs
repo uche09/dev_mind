@@ -59,31 +59,24 @@ impl CodeIndex {
         Ok(())
     }
 
+    pub async fn drop_store(&self) -> anyhow::Result<()> {
+        self.client
+            .drop_store(
+                ahnlich_types::ai::query::DropStore {
+                    store: self.store.clone(),
+                    error_if_not_exists: false,
+                },
+                None,
+            ).await?;
+
+        Ok(())
+    }
+
     /// Generate and store embeddings via Ahnlich Ai proxy
     pub async fn add_chuck(&self, chunk: &CodeChunk) -> anyhow::Result<()> {
-        let text = chunk.build_embedding_text();
-        let mut meta_data = HashMap::new();
-        let meta_data_list = vec![
-            parse_metadata(Metadata::Name, &chunk.item_name),
-            parse_metadata(Metadata::Kind, &format!("{}", chunk.kind)),
-            parse_metadata(Metadata::Path, &chunk.file_path),
-            parse_metadata(
-                Metadata::Scope,
-                &format!("{} {}", chunk.start_line, chunk.end_line),
-            ),
-            parse_metadata(Metadata::Hash, &chunk.content_hash),
-            parse_metadata(Metadata::RawCode, &chunk.raw_code),
-        ];
-        meta_data.extend(meta_data_list.into_iter());
-
         let data_to_store = Set {
             store: self.store.clone(),
-            inputs: vec![AiStoreEntry {
-                key: Some(StoreInput {
-                    value: Some(AiStoreValue::RawString(text)),
-                }),
-                value: Some(StoreValue { value: meta_data }),
-            }],
+            inputs: vec![build_entry(chunk)],
             preprocess_action: PreprocessAction::NoPreprocessing as i32,
             execution_provider: None,
             model_params: HashMap::new(),
@@ -94,6 +87,31 @@ impl CodeIndex {
         Ok(())
     }
 
+    /// Generate and store embeddings for many chunks in a single Ahnlich
+    /// `Set` call.
+    ///
+    /// Ahnlich's `Set.inputs` field is already a `Vec<AiStoreEntry>`, one
+    /// call can carry many entries. Sending them together lets the AI
+    /// proxy run one inference pass across the whole group instead of
+    /// paying per-call overhead (gRPC round trip, tokenization setup) once
+    /// per chunk. This is the change that should have the biggest effect
+    /// on indexing time.
+    pub async fn add_chunks_batch(&self, chunks: &[CodeChunk]) -> anyhow::Result<()> {
+        let inputs = chunks.iter().map(build_entry).collect();
+
+        let data_to_store = Set {
+            store: self.store.clone(),
+            inputs,
+            preprocess_action: PreprocessAction::NoPreprocessing as i32,
+            execution_provider: None,
+            model_params: HashMap::new(),
+        };
+
+        self.client.set(data_to_store, None).await?;
+
+        Ok(())
+    }
+    
     /// Embeds query and perform similarity search against stored vectors via Ahnlich Ai proxy.
     pub async fn ask(&self, query: &str, n: usize) -> anyhow::Result<Vec<SimNHit>> {
         let res: server::GetSimN = self
@@ -115,6 +133,34 @@ impl CodeIndex {
             )
             .await?;
         Ok(format_results(res))
+    }
+}
+
+
+/// Builds a single Ahnlich store entry (embedding input + metadata) from a
+/// `CodeChunk`. So both the single-item and batched paths build entries identically,
+/// one source of truth for how a chunk becomes an `AiStoreEntry`.
+fn build_entry(chunk: &CodeChunk) -> AiStoreEntry {
+    let text = chunk.build_embedding_text();
+    let mut meta_data = HashMap::new();
+    let meta_data_list = vec![
+        parse_metadata(Metadata::Name, &chunk.item_name),
+        parse_metadata(Metadata::Kind, &format!("{}", chunk.kind)),
+        parse_metadata(Metadata::Path, &chunk.file_path),
+        parse_metadata(
+            Metadata::Scope,
+            &format!("{} {}", chunk.start_line, chunk.end_line),
+        ),
+        parse_metadata(Metadata::Hash, &chunk.content_hash),
+        parse_metadata(Metadata::RawCode, &chunk.raw_code),
+    ];
+    meta_data.extend(meta_data_list);
+
+    AiStoreEntry {
+        key: Some(StoreInput {
+            value: Some(AiStoreValue::RawString(text)),
+        }),
+        value: Some(StoreValue { value: meta_data }),
     }
 }
 
