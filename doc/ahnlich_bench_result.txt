@@ -1,0 +1,18 @@
+Benchmarking against 40 real chunks from this project
+ahnlich_indexing/strategy/sequential_single_calls
+                        time:   [12.496 s 13.643 s 14.907 s]
+                        change: [+2.6323% +12.643% +22.549%] (p = 0.03 < 0.05)
+                        Performance has regressed.
+ahnlich_indexing/strategy/batched_no_concurrency
+                        time:   [23.983 s 24.714 s 25.571 s]
+                        change: [+2.6384% +8.0638% +14.014%] (p = 0.01 < 0.05)
+                        Performance has regressed.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+ahnlich_indexing/strategy/batched_bounded_concurrency_3
+                        time:   [23.881 s 24.167 s 24.503 s]
+                        change: [-2.4373% +0.3363% +3.8399%] (p = 0.86 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+

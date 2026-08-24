@@ -3,6 +3,25 @@ name = "devmind"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "devmind"
+path = "src/lib.rs"
+
+[[bin]]
+name = "devmind"
+path = "src/main.rs"
+
+[[bench]]
+name = "parsing_bench"
+harness = false
+
+[[bench]]
+name = "ahnlich_bench"
+harness = false
+
+[features]
+mem_profile = []
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
@@ -21,3 +40,7 @@ rustc_lexer = { package = "ra-ap-rustc_lexer", version = "0.174.0"}
 colored = "2"
 indicatif = "0.17"
 directories = "5"
+
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }

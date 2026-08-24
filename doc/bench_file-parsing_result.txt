@@ -1,0 +1,31 @@
+collect_rust_files (this project)
+                        time:   [749.41 µs 750.17 µs 750.92 µs]
+                        change: [+4.5374% +5.1682% +5.6903%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 5 outliers among 100 measurements (5.00%)
+  3 (3.00%) high mild
+  2 (2.00%) high severe
+
+parse_file (chunk.rs)   time:   [1.0764 ms 1.0830 ms 1.0885 ms]
+                        change: [+0.2746% +1.9444% +3.7136%] (p = 0.01 < 0.05)
+                        Change within noise threshold.
+Found 15 outliers among 100 measurements (15.00%)
+  7 (7.00%) low severe
+  5 (5.00%) low mild
+  1 (1.00%) high mild
+  2 (2.00%) high severe
+
+parse_all_files/parse_file (every file in this project)
+                        time:   [6.2635 ms 6.2863 ms 6.3034 ms]
+                        change: [+3.4087% +4.6706% +6.0735%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 3 outliers among 20 measurements (15.00%)
+  3 (15.00%) low severe
+
+Project path: /home/uche09/projects/rust/ahnlich/
+DEVMIND_BENCH_PATH: parsing 193 files
+parse_external_repo/parse_file (DEVMIND_BENCH_PATH)
+                        time:   [216.86 ms 217.64 ms 218.41 ms]
+                        change: [+2.7928% +3.2566% +3.7361%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+
