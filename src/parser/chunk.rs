@@ -5,6 +5,7 @@ use syn::{
     visit::{self, Visit},
 };
 
+#[derive(Clone)]
 /// Scopes extractable Rust construct and structures to these more commonly used
 pub enum ChunkKind {
     Function,
@@ -30,6 +31,7 @@ impl Display for ChunkKind {
     }
 }
 
+#[derive(Clone)]
 /// Representation of a single extracted code construct
 pub struct CodeChunk {
     pub file_path: String,
