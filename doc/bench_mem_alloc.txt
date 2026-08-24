@@ -1,0 +1,2 @@
+Connected to ahnlich
+Peak heap allocated during indexing: 5.00 MB

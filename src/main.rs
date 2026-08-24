@@ -1,17 +1,13 @@
-mod cli;
-mod embeddings;
-mod config;
-mod parser;
-mod utils;
-mod search;
-
 use anyhow::Context;
 use clap::Parser;
-use config::Config;
+use devmind::config::Config;
 use indicatif::{ProgressBar, ProgressStyle};
-use parser::traverser::{build_ignore_set, collect_rust_files};
+use devmind::embeddings;
+use devmind::parser::{self, 
+    traverser::{build_ignore_set, collect_rust_files},
+};
 use tokio::main;
-use cli::{Cli, Commands, ConfigOptions};
+use devmind::cli::{self, Cli, Commands, ConfigOptions};
 use colored::*;
 
 #[main]
@@ -64,6 +60,12 @@ async fn main() -> anyhow::Result<()> {
                 ).unwrap().progress_chars("=>-"),
             );
 
+            // Reset the peak counter *here*, right before the actual indexing
+            // work starts, so connection setup / arg parsing isn't counted
+            // toward the number we care about.
+            #[cfg(feature = "mem_profile")]
+            devmind::memtrack::reset_peak();
+
             let mut total_chunks = 0usize;
             let mut total_error_chunks = 0usize;
 
@@ -91,6 +93,15 @@ async fn main() -> anyhow::Result<()> {
                 "Indexed {total_chunks} chunks across {} files. Encountered error while indexing {total_error_chunks}.",
                 rust_files.len()
             ));
+
+            #[cfg(feature = "mem_profile")]
+            println!(
+                "{}",
+                format!(
+                    "Peak heap allocated during indexing: {}",
+                    devmind::memtrack::human_bytes(devmind::memtrack::peak_bytes())
+                ).cyan()
+            );
         },
         Commands::Ask { query, n } => {
             let query = query.trim();
