@@ -67,21 +67,21 @@ async fn main() -> anyhow::Result<()> {
             devmind::memtrack::reset_peak();
 
             let mut total_chunks = 0usize;
-            let mut total_error_chunks = 0usize;
+            let mut chuck_error = vec![];
 
             for file in &rust_files {
                 progress_bar.set_message(file.to_owned());
                 let chunks = parser::parse_file(file)?;
                 
                 for chunk in &chunks {
-                    if let Err(_e) = ahnlich_ai_proxy.add_chuck(chunk).await {
-                        progress_bar.println(format!("{}: {} [{}]   {}", 
+                    if let Err(e) = ahnlich_ai_proxy.add_chuck(chunk).await {
+                        let chunk_id = format!("{}: {} [{}]   {}", 
                             "Error pushing chunk".yellow(),
                             chunk.item_name.dimmed(),
                             chunk.kind.to_string().dimmed(),
                             chunk.file_path.yellow()
-                        ));
-                        total_error_chunks += 1;
+                        );
+                        chuck_error.push((chunk_id, e));
                         continue;
                     }
                     total_chunks += 1;
@@ -89,9 +89,12 @@ async fn main() -> anyhow::Result<()> {
                 progress_bar.inc(1);
             }
 
+            for (chunk, e) in &chuck_error {
+                progress_bar.println(format!("Indexing `{}` produced an error: {}", chunk, e));
+            }
             progress_bar.finish_with_message(format!(
-                "Indexed {total_chunks} chunks across {} files. Encountered error while indexing {total_error_chunks}.",
-                rust_files.len()
+                "Indexed {total_chunks} chunks across {} files. Encountered error while indexing {}.",
+                rust_files.len(), chuck_error.len()
             ));
 
             #[cfg(feature = "mem_profile")]
