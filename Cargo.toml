@@ -41,6 +41,7 @@ colored = "2"
 indicatif = "0.17"
 directories = "5"
 futures = "0.3"
+tokenizers = "0.20"
 
 
 [dev-dependencies]

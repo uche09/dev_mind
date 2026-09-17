@@ -1,5 +1,6 @@
 pub mod chunk;
 pub mod traverser;
+pub mod tokenizer;
 
 use chunk::{ChunkVisitor, CodeChunk};
 use syn::visit::Visit;
