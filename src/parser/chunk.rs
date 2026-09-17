@@ -5,6 +5,19 @@ use syn::{
     visit::{self, Visit},
 };
 
+
+#[derive(Clone)]
+pub struct ChunkTokenBound {
+    pub max_token: usize,
+    pub overlap_lines: usize,
+}
+
+impl Default for ChunkTokenBound {
+    fn default() -> Self {
+        Self { max_token: 7000, overlap_lines: 10 }
+    }
+}
+
 #[derive(Clone)]
 /// Scopes extractable Rust construct and structures to these more commonly used
 pub enum ChunkKind {
