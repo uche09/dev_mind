@@ -5,7 +5,6 @@ use syn::{
     visit::{self, Visit},
 };
 
-
 #[derive(Clone)]
 pub struct ChunkTokenBound {
     pub max_token: usize,
@@ -14,7 +13,10 @@ pub struct ChunkTokenBound {
 
 impl Default for ChunkTokenBound {
     fn default() -> Self {
-        Self { max_token: 7000, overlap_lines: 10 }
+        Self {
+            max_token: 7000,
+            overlap_lines: 10,
+        }
     }
 }
 
@@ -23,10 +25,10 @@ impl Default for ChunkTokenBound {
 pub enum ChunkKind {
     Function,
     Struct,
-    Trait,
+    Trait, // Default trait methods are captured in Trait Definition
     Enum,
-    Method,
-    TraitMethod,
+    Method(String),
+    TraitMethod((String, String)), // (trait_name, type_implemented)
     Test,
 }
 
@@ -35,10 +37,10 @@ impl Display for ChunkKind {
         match self {
             Self::Enum => write!(f, "Enum"),
             Self::Function => write!(f, "Function"),
-            Self::Method => write!(f, "Method"),
+            Self::Method(type_) => write!(f, "Method(impl {type_})"),
             Self::Struct => write!(f, "Struct"),
             Self::Trait => write!(f, "Trait"),
-            Self::TraitMethod => write!(f, "Trait Method"),
+            Self::TraitMethod(meta_) => write!(f, "Trait Method(impl {} for {})", meta_.0, meta_.1),
             Self::Test => write!(f, "Test function"),
         }
     }
@@ -61,8 +63,16 @@ pub struct CodeChunk {
 impl CodeChunk {
     /// Format embedding text so it makes sense even to a text embedding model.
     pub fn build_embedding_text(&self) -> String {
+        let method_semantic_header = match &self.kind {
+            ChunkKind::TraitMethod((trait_, type_)) => {
+                format!("Context: Implementation of {trait_} for type {type_}\n")
+            }
+            ChunkKind::Method(type_) => format!("Context: Inherent method for type {type_}\n"),
+            _ => "".to_string(),
+        };
         format!(
-            "File: {}\n{}: {}\nDoc Comment: {}\nComments: \n{}\n\nCode Snippet:\n{}",
+            "{}File: {}\n{}: {}\nDoc Comment: {}\nComments: \n{}\n\nCode Snippet:\n{}",
+            method_semantic_header,
             self.file_path,
             self.kind,
             self.item_name,
@@ -79,11 +89,19 @@ impl Display for CodeChunk {
     }
 }
 
+/// Represent the current nesting state of the parser
+#[derive(Default, Clone)]
+pub struct ImplContext {
+    pub trait_name: Option<String>,
+    pub self_type: String,
+}
+
 /// Chunk extractor. Use the `syn` crate to identity rust logical structures and extract them from a rust file.
 pub struct ChunkVisitor<'a> {
     pub lines: &'a [&'a str],
     pub file_path: &'a str,
     pub is_test_mod: bool, // State field to identify visit into test modules #[cfg[test]]
+    pub current_impl: Option<ImplContext>, // State field to identify trait methods `impl for` and normal methods `impl`
     pub chunks: Vec<CodeChunk>,
 }
 
@@ -101,12 +119,36 @@ impl<'a> ChunkVisitor<'a> {
             file_path: self.file_path.into(),
             kind,
             item_name: name.into(),
-            start_line: start, end_line: end,
+            start_line: start,
+            end_line: end,
             doc_comment: helper::extract_doc_comment(attrs),
             comments: helper::extract_regular_comments(&self.lines[start - 1..end]),
             content_hash: hash_raw_code(&raw_code),
             raw_code,
         });
+    }
+
+    /// Helper to extract a clean string from syn::Type
+    fn type_to_string(ty: &syn::Type) -> String {
+        match ty {
+            syn::Type::Path(type_path) => {
+                let segments: Vec<String> = type_path
+                    .path
+                    .segments
+                    .iter()
+                    .map(|s| s.ident.to_string())
+                    .collect();
+
+                segments.join("::")
+            }
+            _ => "UnknownType".to_string(),
+        }
+    }
+
+    /// Helper to extract a clean string from syn::Path
+    fn path_to_string(path: &syn::Path) -> String {
+        let segments: Vec<String> = path.segments.iter().map(|s| s.ident.to_string()).collect();
+        segments.join("::")
     }
 }
 
@@ -131,31 +173,55 @@ impl<'a> Visit<'a> for ChunkVisitor<'a> {
     // with the trait definition with this function
     fn visit_item_trait(&mut self, i: &'a syn::ItemTrait) {
         self.push(i.span(), &i.ident.to_string(), ChunkKind::Trait, &i.attrs);
-        visit::visit_item_trait(self, i);
     }
 
     fn visit_item_enum(&mut self, i: &'a syn::ItemEnum) {
         self.push(i.span(), &i.ident.to_string(), ChunkKind::Enum, &i.attrs);
     }
 
+    fn visit_item_impl(&mut self, i: &'a syn::ItemImpl) {
+        // Extract the target Struct/Enum/Primitive name
+        let block_name = Self::type_to_string(&i.self_ty);
+
+        // Extract the Trait path if it exists (impl Trait for Struct)
+        let trait_name = i
+            .trait_
+            .as_ref()
+            .map(|(_, path, _)| Self::path_to_string(path));
+
+        let previous_context = self.current_impl.take();
+        self.current_impl = Some(ImplContext {
+            trait_name,
+            self_type: block_name,
+        });
+
+        visit::visit_item_impl(self, i);
+
+        // restore previous context
+        self.current_impl = previous_context;
+    }
+
     fn visit_impl_item_fn(&mut self, i: &'a syn::ImplItemFn) {
+        if let Some(ctx) = &self.current_impl {
+            let kind = match &ctx.trait_name {
+                Some(trait_) => {
+                    ChunkKind::TraitMethod((trait_.to_string(), ctx.self_type.to_string()))
+                }
+                None => ChunkKind::Method(ctx.self_type.to_string()),
+            };
+
+            self.push(i.span(), &i.sig.ident.to_string(), kind, &i.attrs);
+            visit::visit_impl_item_fn(self, i);
+            return;
+        }
+
         self.push(
             i.span(),
             &i.sig.ident.to_string(),
-            ChunkKind::Method,
+            ChunkKind::Method("".into()),
             &i.attrs,
         );
         visit::visit_impl_item_fn(self, i);
-    }
-
-    fn visit_trait_item_fn(&mut self, i: &'a syn::TraitItemFn) {
-        self.push(
-            i.span(),
-            &i.sig.ident.to_string(),
-            ChunkKind::TraitMethod,
-            &i.attrs,
-        );
-        visit::visit_trait_item_fn(self, i);
     }
 
     fn visit_item_mod(&mut self, i: &'a syn::ItemMod) {
@@ -177,6 +243,7 @@ mod tests {
             lines: &lines,
             file_path: "/",
             is_test_mod: false,
+            current_impl: None,
             chunks: vec![],
         };
 
@@ -232,7 +299,7 @@ mod tests {
 
         let chunks = parse_str(src)?;
         let bar = chunks.iter().find(|c| c.item_name == "bar").unwrap();
-        assert!(matches!(bar.kind, ChunkKind::Method));
+        assert!(matches!(&bar.kind, ChunkKind::Method(_type)));
         assert_eq!(chunks.len(), 2); // struct Foo + method bar, nothing extra, nothing missing
         Ok(())
     }
@@ -305,15 +372,7 @@ mod tests {
 
         let trait_chunk = chunks.iter().find(|c| c.item_name == "Retryable").unwrap();
         assert!(matches!(trait_chunk.kind, ChunkKind::Trait));
-
-        let sig_only = chunks
-            .iter()
-            .find(|c| c.item_name == "max_attempts")
-            .unwrap();
-        assert!(matches!(sig_only.kind, ChunkKind::TraitMethod)); // or a dedicated TraitMethod variant if you add one
-
-        let default_impl = chunks.iter().find(|c| c.item_name == "retry").unwrap();
-        assert!(default_impl.raw_code.contains("self.max_attempts() > 0"));
+        assert!(trait_chunk.raw_code.contains("self.max_attempts() > 0"));
         Ok(())
     }
 }
