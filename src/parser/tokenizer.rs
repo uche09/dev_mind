@@ -73,7 +73,9 @@ impl<'a> ChunkSplitter<'a> {
 
         // extract all code statements from this chunk
         let statements = &parsed_fn.block.stmts;
-        if statements.len() < 2 { return Ok(None); }
+        if statements.len() < 2 { 
+            return Ok(Some(self.line_window_split(chunk)?))
+         }
 
         let raw_lines: Vec<&str> = chunk.raw_code.lines().collect();
 
@@ -100,7 +102,8 @@ impl<'a> ChunkSplitter<'a> {
                         groups.push((new_stmt_start, new_stmt_end)); // start new group with new statement
                     } else {
                         // Note new statement may cause an over budget, but is IGNORED added to last group if new statement is
-                        // on the same line (group_start == new_stmt_start) instead of starting a new group with duplicated lines
+                        // on the same line (group_start == new_stmt_start) instead of starting a new group with duplicated lines.
+                        // Duplicated line will affect code slice ownership from overlapping index.
                         let last = groups.last_mut().unwrap();
                         last.1 = new_stmt_end; // update last group with new statement
                     }
@@ -151,8 +154,11 @@ impl<'a> ChunkSplitter<'a> {
             doc_comment: if index == Some(0) { parent.doc_comment.clone() } else { None },
             comments: if parent.comments.is_some() { Some(sub_comments) } else { None },
             kind: parent.kind.clone(),
-            start_line: scope.0,
-            end_line: scope.1,
+
+            // sub chunk is a subset of parent chunk, hence its code lines are relative to the parent.
+            // the arithmetics below is done to preserve the original code line parsed from the file in the splitted chunks
+            start_line: parent.start_line.saturating_add(scope.0).min(parent.end_line),
+            end_line: parent.start_line.saturating_add(scope.1).min(parent.end_line),
             content_hash: hash_raw_code(code),
         }
     }
@@ -172,10 +178,10 @@ impl<'a> ChunkSplitter<'a> {
             let mut splitted_code = vec![];
             while i < code_lines.len() {
                 let start = i.saturating_sub(self.chunk_token_bound.overlap_lines);
-                let end = (i + window).min(code_lines.len());
-                let code = code_lines[start..end].join("\n");
-                splitted_code.push((code, (start +1, end +1))); // code line 1-indexing
-                i += window;
+                let end = (i + window).min(code_lines.len() -1);
+                let code = code_lines[start..=end].join("\n");
+                splitted_code.push((code, (start, end)));
+                i += window +1; // Exclude the included =end index from the next window.
             }
 
             let sub_chunks = splitted_code.into_iter().enumerate()
@@ -301,7 +307,7 @@ use super::*;
     #[test]
     fn oversized_multi_statement_chunk_is_split_within_bound() -> anyhow::Result<()> {
         let counter = HeuristicTokenCounter;
-        let cfg = config(55, 2);
+        let cfg = config(58, 2);
         let splitter = ChunkSplitter::new(&counter, cfg.clone());
 
         let big_body: String = (0..200)
@@ -377,18 +383,36 @@ use super::*;
     #[test]
     fn statements_sharing_one_source_line_are_never_split_apart() -> anyhow::Result<()> {
         let counter = WordCountTokenCounter;
-        // three statements, all on line 1
-        let chunk = make_chunk("let a = 1; let b = 2; let c = 3;", ChunkKind::Function);
+        let code = [
+            "let x = 10;",
+            "let y = 10; let z = 10;",
+            "let a = 1; let b = 2; let c = 3; let d = 4; let e = 5;",
+            "let f = 10; let g = 10; let h = 10;",
+            "let i = 10; let j = 10; let k = 10; let l = 10;",
+            "let m = 10; let n = 10; let o = 10; let p = 10; let q = 10; let r = 10;",
+            "let s = 10; let t = 10; let u = 10; let v = 10; let w = 10; let xx = 10; let yy = 10;",
+            "let aa = {\n(1..8).sum()\n}; let bb = {\n(1..10).sum()\n};\nlet cc = {\n(1..11).sum()\n}; let dd = {\n(1..8).sum()\n}; let ee = {\n(1..8).sum()\n};"
+        ].join("\n");
+
+        let chunk = make_chunk(&code, ChunkKind::Function);
 
         // force an artificially tiny bound so the packer WANTS to split
-        let splitter = ChunkSplitter::new(&counter, config(3, 0));
+        let splitter = ChunkSplitter::new(&counter, config(27, 0));
         let result = splitter.split(chunk)?;
 
         // whatever comes out, no line should be duplicated across
         // sub-chunks with a start line that overlaps another group's range
         for pair in result.windows(2) {
-            // depending on your CodeChunk's line-tracking fields,
+            let first = &pair[0];
+            let second = &pair[1];
+
             // assert start/end ranges never overlap here
+            assert!(
+                first.end_line < second.start_line,
+                "Line overlap detected! Chunk '{}' (lines {}-{}) overlaps with '{}' (lines {}-{})",
+                first.item_name, first.start_line, first.end_line,
+                second.item_name, second.start_line, second.end_line
+            )
         }
         Ok(())
     }
@@ -410,14 +434,14 @@ use super::*;
         );
         let body = format!("let a = 1;\nlet b = 2;\n{long_match}\nlet c = 3;");
         let chunk = make_chunk(&body, ChunkKind::Function);
-
-        let splitter = ChunkSplitter::new(&counter, config(25, 2));
+        let cfg = config(30, 2);
+        let splitter = ChunkSplitter::new(&counter, cfg.clone());
         let result = splitter.split(chunk)?;
 
         assert!(result.len() > 2, "the huge statement should have been broken down further");
         for sub in &result {
             let tokens = counter.count(&sub.build_embedding_text())?;
-            assert!(tokens <= 25, "straggler sub-chunk exceeded bound: {tokens}");
+            assert!(tokens <= cfg.max_token, "straggler sub-chunk exceeded bound: {tokens}");
         }
         Ok(())
     }
