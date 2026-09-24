@@ -1,4 +1,5 @@
 pub mod chunk;
+pub mod tokenizer;
 pub mod traverser;
 
 use chunk::{ChunkVisitor, CodeChunk};
@@ -11,6 +12,7 @@ pub fn parse_file(path: &str) -> anyhow::Result<Vec<CodeChunk>> {
         lines: &lines,
         file_path: path,
         is_test_mod: false,
+        current_impl: None,
         chunks: vec![],
     };
 

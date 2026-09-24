@@ -1,4 +1,4 @@
-use std::{fs::canonicalize, path::PathBuf,};
+use std::{fs::canonicalize, path::PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -41,7 +41,7 @@ pub enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigAction,
-    }
+    },
 }
 
 #[derive(Subcommand)]
@@ -66,9 +66,10 @@ pub enum ConfigAction {
         /// Overwrite existing config file(s) if present
         #[arg(long)]
         force: bool,
-
     },
-    Get { key: ConfigOptions },
+    Get {
+        key: ConfigOptions,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -86,6 +87,5 @@ pub enum ConfigScope {
 }
 
 fn parse_absolute_path(input: &str) -> Result<PathBuf, String> {
-    canonicalize(input)
-        .map_err(|e| format!("Failed to resolve path for '{}': \n{}", input, e))
+    canonicalize(input).map_err(|e| format!("Failed to resolve path for '{}': \n{}", input, e))
 }

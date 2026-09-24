@@ -1,5 +1,5 @@
 use super::metadata::Metadata;
-use crate::{parser::chunk::CodeChunk, search::SimNHit};
+use crate::{parser::chunk::CodeChunk, search::SimNHit, utils::helper};
 use ahnlich_client_rs::ai::AiClient;
 use ahnlich_types::algorithm::algorithms::Algorithm;
 use ahnlich_types::keyval::{
@@ -38,7 +38,7 @@ impl CodeIndex {
     }
 
     /// create store on the running ahnlich db via AI proxy.
-    /// 
+    ///
     /// Uses the `JinaEmbeddingsV2BaseCode` model for both storage
     /// and query embeddings.
     pub async fn create_store(&self) -> anyhow::Result<()> {
@@ -67,7 +67,8 @@ impl CodeIndex {
                     error_if_not_exists: false,
                 },
                 None,
-            ).await?;
+            )
+            .await?;
 
         Ok(())
     }
@@ -111,7 +112,7 @@ impl CodeIndex {
 
         Ok(())
     }
-    
+
     /// Embeds query and perform similarity search against stored vectors via Ahnlich Ai proxy.
     pub async fn ask(&self, query: &str, n: usize) -> anyhow::Result<Vec<SimNHit>> {
         let res: server::GetSimN = self
@@ -136,7 +137,6 @@ impl CodeIndex {
     }
 }
 
-
 /// Builds a single Ahnlich store entry (embedding input + metadata) from a
 /// `CodeChunk`. So both the single-item and batched paths build entries identically,
 /// one source of truth for how a chunk becomes an `AiStoreEntry`.
@@ -152,7 +152,10 @@ fn build_entry(chunk: &CodeChunk) -> AiStoreEntry {
             &format!("{} {}", chunk.start_line, chunk.end_line),
         ),
         parse_metadata(Metadata::Hash, &chunk.content_hash),
-        parse_metadata(Metadata::RawCode, &chunk.raw_code),
+        parse_metadata(
+            Metadata::RawCode,
+            &helper::preview_code(&chunk.raw_code, 15),
+        ),
     ];
     meta_data.extend(meta_data_list);
 

@@ -1,4 +1,4 @@
-use rustc_lexer::{TokenKind, tokenize, FrontmatterAllowed};
+use rustc_lexer::{FrontmatterAllowed, TokenKind, tokenize};
 use syn::{Attribute, Expr, ExprLit, Lit, Meta};
 
 pub fn extract_doc_comment(attrs: &[Attribute]) -> Option<String> {
@@ -25,17 +25,16 @@ pub fn extract_doc_comment(attrs: &[Attribute]) -> Option<String> {
 
 pub fn extract_regular_comments(lines: &[&str]) -> Option<String> {
     /* Extracting regular comment had a challenge:
-    - We only want regular comments - `// ..` or `/* .. */` 
-    - We don't want Doc comment - `//! ..` or `/*! .. */ 
+    - We only want regular comments - `// ..` or `/* .. */`
+    - We don't want Doc comment - `//! ..` or `/*! .. */
 
-    Pattern matching with strings failed because: 
+    Pattern matching with strings failed because:
     - matching `//` would also capture doc comments `//!`
-    - matching `/ *` would also capture inner doc comments `/ *!` 
-    
-    Hence I resolved to using rust `rustc_lexer` crate (beta version from github) 
+    - matching `/ *` would also capture inner doc comments `/ *!`
+
+    Hence I resolved to using rust `rustc_lexer` crate (beta version from github)
     which uses token to identify and differentiate regular comments from doc comments.
     Same crate used in the Rust compiler. */
-
 
     let input = lines.join("\n");
     let mut comments = Vec::new();
@@ -47,13 +46,17 @@ pub fn extract_regular_comments(lines: &[&str]) -> Option<String> {
         match token.kind {
             TokenKind::LineComment { doc_style: None } => {
                 comments.push(text.trim().to_string());
-
             }
-            TokenKind::BlockComment { doc_style: None, terminated: true } => {
+            TokenKind::BlockComment {
+                doc_style: None,
+                terminated: true,
+            } => {
                 comments.push(text.trim().to_string());
-
             }
-            TokenKind::BlockComment { doc_style: None, terminated: false } => {
+            TokenKind::BlockComment {
+                doc_style: None,
+                terminated: false,
+            } => {
                 // Delibrately ignoring unclosed comments
             }
             _ => {}
@@ -79,7 +82,19 @@ pub fn is_cfg_test_mod(attrs: &[Attribute]) -> bool {
     })
 }
 
+pub fn preview_code(code: &str, max_line: usize) -> String {
+    let lines: Vec<&str> = code.lines().collect();
 
+    if lines.len() > max_line {
+        let mut prev = lines[..max_line.min(lines.len() - 1)].to_vec();
+        if max_line <= lines.len() {
+            prev.push("     ...");
+        }
+        prev.join("\n")
+    } else {
+        lines.join("\n")
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -138,10 +153,7 @@ mod tests {
         // "/**/" starts with "/**" as a raw substring but is NOT a doc comment
         let src = "/**/\nfn foo() {}";
         let src: Vec<&str> = src.lines().collect();
-        assert_eq!(
-            extract_regular_comments(&src),
-            Some("/**/".to_string())
-        );
+        assert_eq!(extract_regular_comments(&src), Some("/**/".to_string()));
     }
 
     #[test]
