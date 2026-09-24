@@ -6,6 +6,7 @@ use ahnlich_types::{
     ai::server::GetSimNEntry,
     metadata::{MetadataValue, metadata_value::Value},
 };
+use crate::utils::helper::preview_code;
 
 /// A representation of a single match data from Ahnlich Similarity search result.
 pub struct SimNHit {
@@ -83,7 +84,7 @@ impl Display for SimNHit {
         write!(f, " {}", self.name.yellow().bold())?;
         writeln!(f)?;
         
-        for line in preview_code(&self.snippet, 6) {
+        for line in preview_code(&self.snippet, 6).lines() {
             writeln!(f, "     {}", line)?;
         }
         writeln!(f)
@@ -105,14 +106,4 @@ fn metadata_value_to_string(mv: Option<&MetadataValue>) -> Option<String> {
 }
 
 
-fn preview_code(code: &str, max_line: usize) -> Vec<&str> {
-    let lines: Vec<&str> = code.lines().collect();
 
-    if lines.len() > max_line {
-        let mut prev = lines[..max_line].to_vec();
-        prev.push("     ...");
-        prev
-    } else {
-        lines
-    }
-}

@@ -1,5 +1,5 @@
 use super::metadata::Metadata;
-use crate::{parser::chunk::CodeChunk, search::SimNHit};
+use crate::{parser::chunk::CodeChunk, search::SimNHit, utils::helper};
 use ahnlich_client_rs::ai::AiClient;
 use ahnlich_types::algorithm::algorithms::Algorithm;
 use ahnlich_types::keyval::{
@@ -152,7 +152,7 @@ fn build_entry(chunk: &CodeChunk) -> AiStoreEntry {
             &format!("{} {}", chunk.start_line, chunk.end_line),
         ),
         parse_metadata(Metadata::Hash, &chunk.content_hash),
-        parse_metadata(Metadata::RawCode, &chunk.raw_code),
+        parse_metadata(Metadata::RawCode, &helper::preview_code(&chunk.raw_code, 15)),
     ];
     meta_data.extend(meta_data_list);
 

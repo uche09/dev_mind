@@ -79,6 +79,19 @@ pub fn is_cfg_test_mod(attrs: &[Attribute]) -> bool {
     })
 }
 
+pub fn preview_code(code: &str, max_line: usize) -> String {
+    let lines: Vec<&str> = code.lines().collect();
+
+    if lines.len() > max_line {
+        let mut prev  = lines[..max_line.min(lines.len() -1)].to_vec();
+        if max_line <= lines.len() {
+            prev.push("     ...");
+        }
+        prev.join("\n")
+    } else {
+        lines.join("\n")
+    }
+}
 
 
 #[cfg(test)]
