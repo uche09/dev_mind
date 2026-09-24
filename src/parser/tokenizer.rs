@@ -1,9 +1,13 @@
 use syn::spanned::Spanned;
 
-use crate::{parser::chunk::{ChunkTokenBound, CodeChunk}, utils::hash::hash_raw_code};
+use crate::{
+    parser::chunk::{ChunkTokenBound, CodeChunk},
+    utils::hash::hash_raw_code,
+};
 
 // Boundle tokenizer file for Ahnlich embedding model of choice into project binary.
-static TOKENIZER_BYTES: &[u8] = include_bytes!("../assets/jina-embeddings-v2-base-code-tokenizer.json");
+static TOKENIZER_BYTES: &[u8] =
+    include_bytes!("../assets/jina-embeddings-v2-base-code-tokenizer.json");
 pub trait TokenCounter {
     fn count(&self, text: &str) -> anyhow::Result<usize>;
 }
@@ -22,12 +26,12 @@ impl HuggingFaceCounter {
 
 impl TokenCounter for HuggingFaceCounter {
     fn count(&self, text: &str) -> anyhow::Result<usize> {
-        self.tokenizer.encode(text, false)
+        self.tokenizer
+            .encode(text, false)
             .map(|enc| enc.len())
             .map_err(|e| anyhow::anyhow!("Token Encoding Error: {}", e))
     }
 }
-
 
 /// A fallback token counter that uses a general rough estimation for token counting.
 pub struct HeuristicTokenCounter;
@@ -38,7 +42,6 @@ impl TokenCounter for HeuristicTokenCounter {
     }
 }
 
-
 pub struct ChunkSplitter<'a> {
     token_counter: &'a dyn TokenCounter,
     chunk_token_bound: ChunkTokenBound,
@@ -46,7 +49,7 @@ pub struct ChunkSplitter<'a> {
 
 impl<'a> ChunkSplitter<'a> {
     pub fn new(token_counter: &'a dyn TokenCounter, token_bound_config: ChunkTokenBound) -> Self {
-        Self{
+        Self {
             token_counter,
             chunk_token_bound: token_bound_config,
         }
@@ -58,8 +61,8 @@ impl<'a> ChunkSplitter<'a> {
         if token_count <= self.chunk_token_bound.max_token || chunk.raw_code.is_empty() {
             return Ok(vec![chunk]);
         }
-        
-        match self.structural_split(&chunk)?{
+
+        match self.structural_split(&chunk)? {
             Some(sub_chunks) => Ok(sub_chunks),
             None => self.line_window_split(&chunk),
         }
@@ -73,18 +76,25 @@ impl<'a> ChunkSplitter<'a> {
 
         // extract all code statements from this chunk
         let statements = &parsed_fn.block.stmts;
-        if statements.len() < 2 { 
-            return Ok(Some(self.line_window_split(chunk)?))
-         }
+        if statements.len() < 2 {
+            return Ok(Some(self.line_window_split(chunk)?));
+        }
 
         let raw_lines: Vec<&str> = chunk.raw_code.lines().collect();
 
-        let stmt_ranges: Vec<(usize, usize)> = statements.iter().map(|s| {
-            let span = s.span();
-            let start = span.start().line.saturating_sub(2); // Undo 1-indexing in code-line numbering and undo wrapper line
-            let end = span.end().line.saturating_sub(2).min(raw_lines.len().saturating_sub(1));
-            (start, end)
-        }).collect();
+        let stmt_ranges: Vec<(usize, usize)> = statements
+            .iter()
+            .map(|s| {
+                let span = s.span();
+                let start = span.start().line.saturating_sub(2); // Undo 1-indexing in code-line numbering and undo wrapper line
+                let end = span
+                    .end()
+                    .line
+                    .saturating_sub(2)
+                    .min(raw_lines.len().saturating_sub(1));
+                (start, end)
+            })
+            .collect();
 
         let mut groups: Vec<(usize, usize)> = vec![];
 
@@ -93,12 +103,17 @@ impl<'a> ChunkSplitter<'a> {
                 None => groups.push((new_stmt_start, new_stmt_end)),
                 Some(&(group_start, _)) => {
                     let candidate_code = raw_lines[group_start..=new_stmt_end].join("\n");
-                    let candidate_chunk = self.derive_subchunk(chunk, (0, 0), &candidate_code, None);
-                    let candidate_tokens = self.token_counter.count(&candidate_chunk.build_embedding_text())?;
+                    let candidate_chunk =
+                        self.derive_subchunk(chunk, (0, 0), &candidate_code, None);
+                    let candidate_tokens = self
+                        .token_counter
+                        .count(&candidate_chunk.build_embedding_text())?;
 
                     // if new statement pushes group out of the token bound, start a new group
                     // as long as new statement is NOT on the same line with the last group (group_start != new_stmt_start)
-                    if candidate_tokens > self.chunk_token_bound.max_token && group_start != new_stmt_start {
+                    if candidate_tokens > self.chunk_token_bound.max_token
+                        && group_start != new_stmt_start
+                    {
                         groups.push((new_stmt_start, new_stmt_end)); // start new group with new statement
                     } else {
                         // Note new statement may cause an over budget, but is IGNORED added to last group if new statement is
@@ -111,7 +126,9 @@ impl<'a> ChunkSplitter<'a> {
             }
         }
 
-        let sub_chunks: Vec<CodeChunk> = groups.into_iter().enumerate()
+        let sub_chunks: Vec<CodeChunk> = groups
+            .into_iter()
+            .enumerate()
             .map(|(i, (start, end))| {
                 let code = raw_lines[start..=end].join("\n");
                 self.derive_subchunk(chunk, (start, end), &code, Some(i))
@@ -120,7 +137,9 @@ impl<'a> ChunkSplitter<'a> {
 
         let mut final_chunks = Vec::new();
         for sub_chunk in sub_chunks {
-            let tokens = self.token_counter.count(&sub_chunk.build_embedding_text())?;
+            let tokens = self
+                .token_counter
+                .count(&sub_chunk.build_embedding_text())?;
             if tokens > self.chunk_token_bound.max_token {
                 final_chunks.extend(self.line_window_split(&sub_chunk)?);
             } else {
@@ -133,15 +152,21 @@ impl<'a> ChunkSplitter<'a> {
 
     /// Create a new `CodeChunk` that inherits the ID (file_path, item_kind, comment etc.) of the parent chunk.
     /// Sub-chunks are uniquely ID-ed by the index prepended to the inherited item
-    fn derive_subchunk(&self, parent: &CodeChunk, scope: (usize, usize), code: &str, index: Option<usize>) -> CodeChunk {
+    fn derive_subchunk(
+        &self,
+        parent: &CodeChunk,
+        scope: (usize, usize),
+        code: &str,
+        index: Option<usize>,
+    ) -> CodeChunk {
         let comment_lines = parent.comments.clone().unwrap_or_default();
         let comment_lines = comment_lines.lines().collect::<Vec<_>>();
         let lines = comment_lines.len();
-        let half = if lines > 1 { lines / 2 } else {0};
+        let half = if lines > 1 { lines / 2 } else { 0 };
 
         let sub_comments = if index.is_none() {
             "".to_string()
-        }else if index == Some(0) {
+        } else if index == Some(0) {
             comment_lines[0..half].join("\n")
         } else {
             comment_lines[half..].join("\n")
@@ -151,25 +176,41 @@ impl<'a> ChunkSplitter<'a> {
             file_path: parent.file_path.clone(),
             item_name: format!("{}#part{}", parent.item_name, index.unwrap_or_default()),
             raw_code: code.to_string(),
-            doc_comment: if index == Some(0) { parent.doc_comment.clone() } else { None },
-            comments: if parent.comments.is_some() { Some(sub_comments) } else { None },
+            doc_comment: if index == Some(0) {
+                parent.doc_comment.clone()
+            } else {
+                None
+            },
+            comments: if parent.comments.is_some() {
+                Some(sub_comments)
+            } else {
+                None
+            },
             kind: parent.kind.clone(),
 
             // sub chunk is a subset of parent chunk, hence its code lines are relative to the parent.
             // the arithmetics below is done to preserve the original code line parsed from the file in the splitted chunks
-            start_line: parent.start_line.saturating_add(scope.0).min(parent.end_line),
-            end_line: parent.start_line.saturating_add(scope.1).min(parent.end_line),
+            start_line: parent
+                .start_line
+                .saturating_add(scope.0)
+                .min(parent.end_line),
+            end_line: parent
+                .start_line
+                .saturating_add(scope.1)
+                .min(parent.end_line),
             content_hash: hash_raw_code(code),
         }
     }
 
-    /// A syntax (structure)-unaware code splitter for oversized `CodeChunk`s. 
-    /// 
+    /// A syntax (structure)-unaware code splitter for oversized `CodeChunk`s.
+    ///
     /// Uses a split window that starts at half the total line of code with a configured overlapping lines
     /// for each window, and gradually adjust window if still over budget.
     fn line_window_split(&self, chunk: &CodeChunk) -> anyhow::Result<Vec<CodeChunk>> {
         let code_lines = chunk.raw_code.lines().collect::<Vec<_>>();
-        if code_lines.is_empty() { return Ok(vec![chunk.clone()]); }
+        if code_lines.is_empty() {
+            return Ok(vec![chunk.clone()]);
+        }
 
         let mut window = code_lines.len().div_ceil(2).max(1);
 
@@ -178,41 +219,41 @@ impl<'a> ChunkSplitter<'a> {
             let mut splitted_code = vec![];
             while i < code_lines.len() {
                 let start = i.saturating_sub(self.chunk_token_bound.overlap_lines);
-                let end = (i + window).min(code_lines.len() -1);
+                let end = (i + window).min(code_lines.len() - 1);
                 let code = code_lines[start..=end].join("\n");
                 splitted_code.push((code, (start, end)));
-                i += window +1; // Exclude the included =end index from the next window.
+                i += window + 1; // Exclude the included =end index from the next window.
             }
 
-            let sub_chunks = splitted_code.into_iter().enumerate()
-                .map(|(i, (s, scope))| {
-                    self.derive_subchunk(chunk, scope, &s, Some(i))
-                }).collect::<Vec<CodeChunk>>();
+            let sub_chunks = splitted_code
+                .into_iter()
+                .enumerate()
+                .map(|(i, (s, scope))| self.derive_subchunk(chunk, scope, &s, Some(i)))
+                .collect::<Vec<CodeChunk>>();
 
-            let token_counts = sub_chunks.iter()
+            let token_counts = sub_chunks
+                .iter()
                 .map(|c| self.token_counter.count(&c.build_embedding_text()))
                 .collect::<Result<Vec<usize>, anyhow::Error>>()?;
 
-            let all_within_bound = token_counts.iter()
+            let all_within_bound = token_counts
+                .iter()
                 .all(|&tokens| tokens <= self.chunk_token_bound.max_token);
 
-            if all_within_bound || window <= 1 { return Ok(sub_chunks) }
+            if all_within_bound || window <= 1 {
+                return Ok(sub_chunks);
+            }
 
             window = (window / 2).max(1);
         }
     }
 }
 
-
-
-
-
-
 #[cfg(test)]
 mod tests {
     use crate::parser::chunk::{self, ChunkKind};
 
-use super::*;
+    use super::*;
 
     // -------------------------------------------------------------
     // Test helpers
@@ -247,7 +288,10 @@ use super::*;
     }
 
     fn config(max_token: usize, overlap_lines: usize) -> ChunkTokenBound {
-        ChunkTokenBound { max_token, overlap_lines }
+        ChunkTokenBound {
+            max_token,
+            overlap_lines,
+        }
     }
 
     // -------------------------------------------------------------
@@ -268,7 +312,7 @@ use super::*;
     }
 
     #[test]
-    fn chunk_exactly_at_the_boundary_is_not_split() -> anyhow::Result<()>{
+    fn chunk_exactly_at_the_boundary_is_not_split() -> anyhow::Result<()> {
         // build_embedding_text() wraps raw_code in a template, so we can't
         // predict the *exact* word count of the finished text by hand here.
         // Instead: measure it first, then set max_tokens to that exact
@@ -280,23 +324,30 @@ use super::*;
         let splitter = ChunkSplitter::new(&counter, config(exact_tokens, 0));
         let result = splitter.split(chunk)?;
 
-        assert_eq!(result.len(), 1, "a chunk exactly at the limit should pass through unsplit");
+        assert_eq!(
+            result.len(),
+            1,
+            "a chunk exactly at the limit should pass through unsplit"
+        );
         Ok(())
     }
 
     #[test]
-    fn chunk_one_token_over_the_boundary_is_split() -> anyhow::Result<()>{
+    fn chunk_one_token_over_the_boundary_is_split() -> anyhow::Result<()> {
         let counter = WordCountTokenCounter;
         let chunk = make_chunk(
             "let a = 1;\nlet b = 2;\nlet c = 3;\nlet d = 4;\nlet e = 5;\nlet f = 6;",
-            ChunkKind::Function
+            ChunkKind::Function,
         );
         let exact_tokens = counter.count(&chunk.build_embedding_text())?;
 
         let splitter = ChunkSplitter::new(&counter, config(exact_tokens - 1, 1));
         let result = splitter.split(chunk)?;
 
-        assert!(result.len() > 1, "one token over the limit should trigger a split");
+        assert!(
+            result.len() > 1,
+            "one token over the limit should trigger a split"
+        );
         Ok(())
     }
 
@@ -331,7 +382,7 @@ use super::*;
     }
 
     #[test]
-    fn structural_split_keeps_each_subchunk_as_valid_statements() -> anyhow::Result<()>{
+    fn structural_split_keeps_each_subchunk_as_valid_statements() -> anyhow::Result<()> {
         // Every sub-chunk's raw_code should itself be parseable as a
         // sequence of statements, proving the split landed on statement
         // boundaries rather than cutting mid-expression.
@@ -358,21 +409,27 @@ use super::*;
     }
 
     #[test]
-    fn single_statement_chunk_skips_structural_split() -> anyhow::Result<()>{
+    fn single_statement_chunk_skips_structural_split() -> anyhow::Result<()> {
         // Only one statement means structural_split's `stmts.len() < 2`
         // guard returns None immediately, so this must fall through to
         // line_window_split instead, and still respect the bound.
         let counter = WordCountTokenCounter;
         let long_match = format!(
             "match n {{\n{}\n_ => 0,\n}}",
-            (0..100).map(|i| format!("    {i} => {i} * 2,")).collect::<Vec<_>>().join("\n")
+            (0..100)
+                .map(|i| format!("    {i} => {i} * 2,"))
+                .collect::<Vec<_>>()
+                .join("\n")
         );
         let chunk = make_chunk(&long_match, ChunkKind::Function);
         let splitter = ChunkSplitter::new(&counter, config(40, 3));
 
         let result = splitter.split(chunk)?;
 
-        assert!(result.len() > 1, "single oversized statement should still be split by line window");
+        assert!(
+            result.len() > 1,
+            "single oversized statement should still be split by line window"
+        );
         for sub in &result {
             let tokens = counter.count(&sub.build_embedding_text())?;
             assert!(tokens <= 40, "sub-chunk exceeded bound: {tokens}");
@@ -410,19 +467,24 @@ use super::*;
             assert!(
                 first.end_line < second.start_line,
                 "Line overlap detected! Chunk '{}' (lines {}-{}) overlaps with '{}' (lines {}-{})",
-                first.item_name, first.start_line, first.end_line,
-                second.item_name, second.start_line, second.end_line
+                first.item_name,
+                first.start_line,
+                first.end_line,
+                second.item_name,
+                second.start_line,
+                second.end_line
             )
         }
         Ok(())
     }
-    
+
     // -------------------------------------------------------------
     // 3. The "recursing on stragglers" path
     // -------------------------------------------------------------
 
     #[test]
-    fn oversized_single_statement_among_small_ones_is_demoted_to_line_window() -> anyhow::Result<()> {
+    fn oversized_single_statement_among_small_ones_is_demoted_to_line_window() -> anyhow::Result<()>
+    {
         // Mix of many tiny statements plus one enormous one-liner. The
         // packing loop's `current.len() > 1` guard will let the huge
         // statement through as its own oversized group; the post-pass
@@ -430,7 +492,10 @@ use super::*;
         let counter = WordCountTokenCounter;
         let long_match = format!(
             "match n {{\n{}\n_ => 0,\n}}",
-            (0..100).map(|i| format!("    {i} => {i} * 2,")).collect::<Vec<_>>().join("\n")
+            (0..100)
+                .map(|i| format!("    {i} => {i} * 2,"))
+                .collect::<Vec<_>>()
+                .join("\n")
         );
         let body = format!("let a = 1;\nlet b = 2;\n{long_match}\nlet c = 3;");
         let chunk = make_chunk(&body, ChunkKind::Function);
@@ -438,10 +503,16 @@ use super::*;
         let splitter = ChunkSplitter::new(&counter, cfg.clone());
         let result = splitter.split(chunk)?;
 
-        assert!(result.len() > 2, "the huge statement should have been broken down further");
+        assert!(
+            result.len() > 2,
+            "the huge statement should have been broken down further"
+        );
         for sub in &result {
             let tokens = counter.count(&sub.build_embedding_text())?;
-            assert!(tokens <= cfg.max_token, "straggler sub-chunk exceeded bound: {tokens}");
+            assert!(
+                tokens <= cfg.max_token,
+                "straggler sub-chunk exceeded bound: {tokens}"
+            );
         }
         Ok(())
     }
@@ -519,10 +590,8 @@ use super::*;
         let splitter = ChunkSplitter::new(&counter, config(10, 2));
         let result = splitter.line_window_split(&chunk)?;
 
-        let covered: std::collections::HashSet<&str> = result
-            .iter()
-            .flat_map(|c| c.raw_code.lines())
-            .collect();
+        let covered: std::collections::HashSet<&str> =
+            result.iter().flat_map(|c| c.raw_code.lines()).collect();
 
         for line in &lines {
             assert!(
@@ -554,7 +623,10 @@ use super::*;
         assert!(result.len() > 1);
         assert_eq!(result[0].doc_comment, chunk.doc_comment);
         for sub in &result[1..] {
-            assert!(sub.doc_comment.is_none(), "only the first sub-chunk should keep the doc comment");
+            assert!(
+                sub.doc_comment.is_none(),
+                "only the first sub-chunk should keep the doc comment"
+            );
         }
         Ok(())
     }
@@ -626,12 +698,19 @@ use super::*;
         // fall back to; it must still return at least that one chunk
         // rather than panicking or looping.
         let counter = WordCountTokenCounter;
-        let chunk = make_chunk("let x = very_long_function_call_with_many_words_in_it();", ChunkKind::Function);
+        let chunk = make_chunk(
+            "let x = very_long_function_call_with_many_words_in_it();",
+            ChunkKind::Function,
+        );
         let splitter = ChunkSplitter::new(&counter, config(1, 0));
 
         let result = splitter.line_window_split(&chunk)?;
 
-        assert_eq!(result.len(), 1, "a single line can't be split below one window");
+        assert_eq!(
+            result.len(),
+            1,
+            "a single line can't be split below one window"
+        );
         Ok(())
     }
 

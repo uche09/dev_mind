@@ -2,11 +2,11 @@ use colored::*;
 use std::fmt::Display;
 
 use crate::embeddings::metadata::Metadata;
+use crate::utils::helper::preview_code;
 use ahnlich_types::{
     ai::server::GetSimNEntry,
     metadata::{MetadataValue, metadata_value::Value},
 };
-use crate::utils::helper::preview_code;
 
 /// A representation of a single match data from Ahnlich Similarity search result.
 pub struct SimNHit {
@@ -65,25 +65,25 @@ impl TryFrom<GetSimNEntry> for SimNHit {
 }
 
 impl Display for SimNHit {
-
     /// Card display for a single match data from Ahnlich similarity search
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let header = format!(
-            "similarity {:.3} -------", self.similarity
-        );
+        let header = format!("similarity {:.3} -------", self.similarity);
         let start_line = self.start_line.map_or("_".to_string(), |l| l.to_string());
         let end_line = self.end_line.map_or("_".to_string(), |l| l.to_string());
 
         write!(f, "{}", header.cyan())?;
-        write!(f, 
+        write!(
+            f,
             "   {}  {}",
-            format!("{}: {}-{}", self.path, start_line, end_line).green().bold(),
+            format!("{}: {}-{}", self.path, start_line, end_line)
+                .green()
+                .bold(),
             format!("[{}]", self.kind).dimmed()
         )?;
 
         write!(f, " {}", self.name.yellow().bold())?;
         writeln!(f)?;
-        
+
         for line in preview_code(&self.snippet, 6).lines() {
             writeln!(f, "     {}", line)?;
         }
@@ -94,16 +94,11 @@ impl Display for SimNHit {
 fn metadata_value_to_string(mv: Option<&MetadataValue>) -> Option<String> {
     match mv {
         Some(mt) => match &mt.value {
-            Some(Value::RawString(txt)) => {
-                Some(txt.to_owned())
-            }
+            Some(Value::RawString(txt)) => Some(txt.to_owned()),
             None => None,
-            _ => None
+            _ => None,
         },
 
         None => None,
     }
 }
-
-
-

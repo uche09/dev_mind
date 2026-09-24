@@ -1,6 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use devmind::parser::traverser::{build_ignore_set, collect_rust_files};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use devmind::parser::parse_file;
+use devmind::parser::traverser::{build_ignore_set, collect_rust_files};
 
 fn default_ignore() -> globset::GlobSet {
     build_ignore_set(&["**/target".to_string(), "**/*.toml".to_string()]).unwrap()

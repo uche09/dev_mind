@@ -1,9 +1,9 @@
 use crate::embeddings::ahnlich::CodeIndex;
 use crate::parser::chunk::CodeChunk;
 use anyhow::Result;
-use std::sync::Arc;
 use futures::stream::{self, StreamExt};
-use tokio::time::{sleep, Duration};
+use std::sync::Arc;
+use tokio::time::{Duration, sleep};
 
 /// Splits `chunks` into groups of `batch_size` and convert it to a stream of batches
 /// then sends each group as a single Ahnlich `Set` call (via `CodeIndex::add_chunks_batch`), running
@@ -18,8 +18,7 @@ pub async fn index_batches_bounded(
     batch_size: usize,
     concurrency: usize,
 ) -> Vec<(usize, usize, Result<()>)> {
-    let batches: Vec<&[CodeChunk]> = chunks
-        .chunks(batch_size).collect();
+    let batches: Vec<&[CodeChunk]> = chunks.chunks(batch_size).collect();
 
     // convert vector of slices into a stream - async equivalent of an iterator
     stream::iter(batches.into_iter().enumerate())
@@ -32,5 +31,6 @@ pub async fn index_batches_bounded(
             }
         })
         .buffer_unordered(concurrency)
-        .collect().await
+        .collect()
+        .await
 }

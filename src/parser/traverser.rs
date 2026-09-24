@@ -39,7 +39,7 @@ pub fn collect_rust_files(root: &str, ignore: &GlobSet) -> anyhow::Result<Vec<St
 mod tests {
     use std::path::Path;
 
-use super::*;
+    use super::*;
     use crate::config::Config;
 
     #[test]

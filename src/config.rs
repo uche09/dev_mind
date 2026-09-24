@@ -1,8 +1,8 @@
+use crate::cli::ConfigScope;
+use colored::*;
+use directories::ProjectDirs;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
-use directories::ProjectDirs;
-use colored::*;
-use crate::cli::ConfigScope;
 
 #[derive(Deserialize, Debug, Default)]
 struct PartialConfig {
@@ -18,7 +18,6 @@ pub struct Config {
     pub ignore: Vec<String>,
     pub ahnlich_addr: String,
 }
-
 
 impl Config {
     // Create default config files
@@ -39,18 +38,18 @@ impl Config {
             ignore
         };
 
-        if matches! (scope, ConfigScope::Global | ConfigScope::Both) {
+        if matches!(scope, ConfigScope::Global | ConfigScope::Both) {
             let path = Self::global_config_path()
                 .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?;
             Self::write_template(&path, &Self::global_template(&addr), force)?;
         }
 
-        if matches! (scope, ConfigScope::Project | ConfigScope::Both) {
+        if matches!(scope, ConfigScope::Project | ConfigScope::Both) {
             let path = std::env::current_dir()?.join("devmind.toml");
             Self::write_template(
-                &path, 
+                &path,
                 &Self::project_template(&store_name, &ignore_patterns),
-                force
+                force,
             )?;
         }
 
@@ -61,7 +60,11 @@ impl Config {
         if path.exists() && !force {
             println!(
                 "{}",
-                format!("Skipped {} (already exists, use --force to overwrite)", path.display()).yellow()
+                format!(
+                    "Skipped {} (already exists, use --force to overwrite)",
+                    path.display()
+                )
+                .yellow()
             );
             return Ok(());
         }
@@ -82,7 +85,7 @@ impl Config {
 
     fn global_template(ahnlich_addr: &str) -> String {
         format!(
-r#"# DevMind global config
+            r#"# DevMind global config
 # Applies to every project unless overridden by a project-level devmind.toml
 # Location: resolved via XDG_CONFIG_HOME (~/.config/devmind/config.toml on Linux)
 
@@ -98,7 +101,7 @@ ahnlich_addr = "{ahnlich_addr}"
             .join(", ");
 
         format!(
-r#"# DevMind project config
+            r#"# DevMind project config
 # Overrides the global config for this project only.
 # Safe to commit to version control.
 
@@ -112,7 +115,7 @@ ignore = [{ignore_list}]
         )
     }
     fn default() -> PartialConfig {
-        PartialConfig { 
+        PartialConfig {
             store: Some("devmind".to_string()),
             ignore: Some(vec!["**/target".into(), "**/*.toml".into()]),
             ahnlich_addr: Some("localhost:1370".to_string()),
@@ -144,9 +147,9 @@ ignore = [{ignore_list}]
         None
     }
     fn merge(base: PartialConfig, override_layer: PartialConfig) -> PartialConfig {
-        PartialConfig { 
-            store: override_layer.store.or(base.store), 
-            ignore: override_layer.ignore.or(base.ignore), 
+        PartialConfig {
+            store: override_layer.store.or(base.store),
+            ignore: override_layer.ignore.or(base.ignore),
             ahnlich_addr: override_layer.ahnlich_addr.or(base.ahnlich_addr),
         }
     }
@@ -154,23 +157,24 @@ ignore = [{ignore_list}]
         let mut resolved = Self::default();
 
         // Layer 2: global (~/.config/devmind/config.toml)
-        if let Some(path) = Self::global_config_path() 
-        && 
-        let Some(layer) = Self::read_layer(&path)? {
+        if let Some(path) = Self::global_config_path()
+            && let Some(layer) = Self::read_layer(&path)?
+        {
             resolved = Self::merge(resolved, layer);
-            
         }
 
         // Layer 3: Project (nearest devmind.toml walking up from CWD)
         let cwd = std::env::current_dir()?;
         if let Some(path) = Self::find_project_config(&cwd)
-        && let Some(layer) = Self::read_layer(&path)? {
+            && let Some(layer) = Self::read_layer(&path)?
+        {
             resolved = Self::merge(resolved, layer);
         }
 
         // Layer 4: Env var
         if let Ok(env_path) = std::env::var("DEVMIND_CONFIG")
-        && let Some(layer) = Self::read_layer(Path::new(&env_path))? {
+            && let Some(layer) = Self::read_layer(Path::new(&env_path))?
+        {
             resolved = Self::merge(resolved, layer);
         }
 
@@ -178,12 +182,12 @@ ignore = [{ignore_list}]
         if let Some(path) = config_path {
             match Self::read_layer(path)? {
                 Some(layer) => resolved = Self::merge(resolved, layer),
-                None => anyhow::bail!("Config file not found: {}", path.display())
+                None => anyhow::bail!("Config file not found: {}", path.display()),
             }
         }
-        
+
         // defaults() guarantees every field is Some, so these unwraps can never panic;
-        Ok(Config { 
+        Ok(Config {
             store: resolved.store.unwrap(),
             ignore: resolved.ignore.unwrap(),
             ahnlich_addr: resolved.ahnlich_addr.unwrap(),
