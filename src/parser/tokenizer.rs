@@ -98,17 +98,25 @@ impl<'a> ChunkSplitter<'a> {
 
             if new_stmt_start > new_stmt_end { continue; }
 
+            let current_group_len = groups.len();
+
             match groups.last_mut() {
                 None => {
                     // First group initialisation
                     let code = raw_lines[new_stmt_start..=new_stmt_end].join("\n");
-                    let candidate = self.derive_subchunk(chunk, (0, 0), &code, None);
+                    let candidate = self.derive_subchunk(chunk, (0, 0), &code, 0);
                     let tokens = self.token_counter.count(&candidate.build_embedding_text())?;
                     groups.push((new_stmt_start, new_stmt_end, tokens));
                 }
                 Some((group_start, group_end, cached_tokens)) => {
                     let candidate_code = raw_lines[*group_start..=new_stmt_end].join("\n");
-                    let candidate_chunk = self.derive_subchunk(chunk, (0,0), &candidate_code, None);
+
+                    // Index is used inside `self.derive_subchunk()` to determine which child chunk gets doc_comment or comments
+                    // and which child doesn't to avoid duplication.
+                    // Hence the size of a child chunk can vary based on their index.
+                    // Using a child chunk's actual index for lookahead improves code predictability and testing.
+                    let lookahead_idx = if current_group_len == 1 { 0 } else { current_group_len - 1 }; // 0 len is handled in the `None` arm
+                    let candidate_chunk = self.derive_subchunk(chunk, (0,0), &candidate_code, lookahead_idx);
                     let candidate_tokens = self.token_counter.count(&candidate_chunk.build_embedding_text())?;
 
                     // if new statement pushes group out of the token bound, start a new group
@@ -116,7 +124,8 @@ impl<'a> ChunkSplitter<'a> {
                     if candidate_tokens > self.chunk_token_bound.max_token && *group_start != new_stmt_start {
                         // Start new group, calculate its baseline token
                         let code = raw_lines[new_stmt_start..=new_stmt_end].join("\n");
-                        let candidate = self.derive_subchunk(chunk, (0,0), &code, None);
+                        let next_idx = current_group_len;
+                        let candidate = self.derive_subchunk(chunk, (0,0), &code, next_idx);
                         let tokens = self.token_counter.count(&candidate.build_embedding_text())?;
                         groups.push((new_stmt_start, new_stmt_end, tokens));
                     }else {
@@ -135,7 +144,7 @@ impl<'a> ChunkSplitter<'a> {
 
         for (i, (start, end, cached_tokens)) in groups.into_iter().enumerate() {
             let code = raw_lines[start..=end].join("\n");
-            let mut sub_chunk = self.derive_subchunk(chunk, (start, end), &code, Some(i));
+            let mut sub_chunk = self.derive_subchunk(chunk, (start, end), &code, i);
             sub_chunk.token_count = Some(cached_tokens);
 
             // if the single block itself is natively over-budget, fall back safely
@@ -156,26 +165,28 @@ impl<'a> ChunkSplitter<'a> {
         parent: &CodeChunk,
         scope: (usize, usize),
         code: &str,
-        index: Option<usize>,
+        index: usize,
     ) -> CodeChunk {
         let comment_lines = parent.comments.clone().unwrap_or_default();
         let comment_lines = comment_lines.lines().collect::<Vec<_>>();
         let lines = comment_lines.len();
         let half = if lines > 1 { lines / 2 } else { 0 };
 
-        let sub_comments = if index.is_none() {
-            "".to_string()
-        } else if index == Some(0) {
+        // split regular comments among first and second child.
+        let sub_comments = if index == 0 {
             comment_lines[0..half].join("\n")
-        } else {
+        } else if index == 1 {
             comment_lines[half..].join("\n")
+        } else {
+            "".to_string()
         };
 
         CodeChunk {
             file_path: parent.file_path.clone(),
-            item_name: format!("{}#part{}", parent.item_name, index.unwrap_or_default()),
+            item_name: format!("{}#part{}", parent.item_name, index),
             raw_code: code.to_string(),
-            doc_comment: if index == Some(0) {
+            // Only the first child inherit doc_comment, to avoid duplication and memory consumption.
+            doc_comment: if index == 0 {
                 parent.doc_comment.clone()
             } else {
                 None
@@ -224,7 +235,7 @@ impl<'a> ChunkSplitter<'a> {
                 let end = (i + window).min(code_lines.len() - 1);
                 let code = code_lines[start..=end].join("\n");
 
-                sub_chunks.push(self.derive_subchunk(chunk, (start, end), &code, Some(index)));
+                sub_chunks.push(self.derive_subchunk(chunk, (start, end), &code, index));
                 i += window + 1; // Exclude the included =end index from the next window.
                 index += 1;
             }
