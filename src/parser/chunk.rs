@@ -14,8 +14,8 @@ pub struct ChunkTokenBound {
 impl Default for ChunkTokenBound {
     fn default() -> Self {
         Self {
-            max_token: 7000,
-            overlap_lines: 10,
+            max_token: 4000,
+            overlap_lines: 6,
         }
     }
 }
