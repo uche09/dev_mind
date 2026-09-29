@@ -63,6 +63,8 @@ impl<'a> ChunkSplitter<'a> {
         let token_count = self.token_counter.count(&chunk.build_embedding_text())?;
 
         if token_count <= self.chunk_token_bound.max_token || chunk.raw_code.is_empty() {
+            let mut chunk = chunk;
+            chunk.token_count = Some(token_count);
             return Ok(vec![chunk]);
         }
 
