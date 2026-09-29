@@ -32,28 +32,38 @@ pub async fn index_batches_bounded(
         .await
 }
 
-/// Groups `CodeChunk`s into batches based on batch token budget and/or max number of members
+/// Groups `CodeChunk`s into batches based on batched token padding cost logic and/or max number of members
 pub fn group_by_token_budget(
-    chunks: Vec<CodeChunk>,
-    max_batch_tokens: usize,
+    mut chunks: Vec<CodeChunk>,
+    max_batch_padding_cost: usize,
     max_batch_len: usize,
 ) -> anyhow::Result<Vec<Vec<CodeChunk>>> {
+    // Similarly-sized chunks end up close to each other, minimizing padding waste
+    // within any batch this produces.
+    chunks.sort_by_key(|c| c.token_count.unwrap_or(usize::MAX));
+
     let mut batches = Vec::new();
     let mut current = Vec::new();
-    let mut current_tokens = 0usize;
+    let mut current_max = 0usize;
 
     for chunk in chunks {
         let tokens = chunk.token_count.unwrap_or(usize::MAX);
+        let projected_max = current_max.max(tokens); // token of the longest member
+        
+        // Performance pattern inidicates that every member of the batch gets **padded**
+        // to the longest member in the batch, which is the actual batch cost,
+        // not what the memebers individually add up to.
+        let projected_cost = (current.len() + 1) * projected_max;
 
-        let exceeds_token_budget = current_tokens.saturating_add(tokens) > max_batch_tokens;
+        let exceeds_cost_budget = projected_cost > max_batch_padding_cost;
         let exceeds_max_amnt_members = current.len() >= max_batch_len;
 
-        if !current.is_empty() && (exceeds_token_budget || exceeds_max_amnt_members)  {
+        if !current.is_empty() && (exceeds_cost_budget || exceeds_max_amnt_members)  {
             batches.push(std::mem::take(&mut current)); // push current saturated batch
-            current_tokens = 0; // reset to start new batch
+            current_max = 0; // reset to start new batch
         }
 
-        current_tokens += tokens;
+        current_max += current_max.max(tokens);
         current.push(chunk); // current batch not yet saturated, add new chunk.
     }
 
