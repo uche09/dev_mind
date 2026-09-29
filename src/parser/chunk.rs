@@ -14,8 +14,8 @@ pub struct ChunkTokenBound {
 impl Default for ChunkTokenBound {
     fn default() -> Self {
         Self {
-            max_token: 7000,
-            overlap_lines: 10,
+            max_token: 4000,
+            overlap_lines: 6,
         }
     }
 }
@@ -58,6 +58,7 @@ pub struct CodeChunk {
     pub comments: Option<String>,
     pub raw_code: String,
     pub content_hash: String,
+    pub token_count: Option<usize>,
 }
 
 impl CodeChunk {
@@ -125,6 +126,7 @@ impl<'a> ChunkVisitor<'a> {
             comments: helper::extract_regular_comments(&self.lines[start - 1..end]),
             content_hash: hash_raw_code(&raw_code),
             raw_code,
+            token_count: None,
         });
     }
 

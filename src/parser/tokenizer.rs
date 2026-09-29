@@ -8,6 +8,10 @@ use crate::{
 // Boundle tokenizer file for Ahnlich embedding model of choice into project binary.
 static TOKENIZER_BYTES: &[u8] =
     include_bytes!("../assets/jina-embeddings-v2-base-code-tokenizer.json");
+
+// The actual MAX_TOKEN for jina-embeddings-v2-base-code model is 8000+
+pub static MODEL_MAX_TOKEN: usize = 7000; //
+
 pub trait TokenCounter {
     fn count(&self, text: &str) -> anyhow::Result<usize>;
 }
@@ -81,72 +85,80 @@ impl<'a> ChunkSplitter<'a> {
         }
 
         let raw_lines: Vec<&str> = chunk.raw_code.lines().collect();
+        if raw_lines.is_empty() {
+            return Ok(Some(vec![]));
+        }
 
-        let stmt_ranges: Vec<(usize, usize)> = statements
-            .iter()
-            .map(|s| {
-                let span = s.span();
-                let start = span.start().line.saturating_sub(2); // Undo 1-indexing in code-line numbering and undo wrapper line
-                let end = span
-                    .end()
-                    .line
-                    .saturating_sub(2)
-                    .min(raw_lines.len().saturating_sub(1));
-                (start, end)
-            })
-            .collect();
+        let mut groups: Vec<(usize, usize, usize)> = vec![];
 
-        let mut groups: Vec<(usize, usize)> = vec![];
+        for stmt in statements {
+            let span = stmt.span();
+            let new_stmt_start = span.start().line.saturating_sub(2); // Undo 1-indexing in code-line numbering and undo wrapper line
+            let new_stmt_end = span
+                .end()
+                .line
+                .saturating_sub(2)
+                .min(raw_lines.len().saturating_sub(1));
 
-        for &(new_stmt_start, new_stmt_end) in &stmt_ranges {
-            match groups.last() {
-                None => groups.push((new_stmt_start, new_stmt_end)),
-                Some(&(group_start, _)) => {
-                    let candidate_code = raw_lines[group_start..=new_stmt_end].join("\n");
-                    let candidate_chunk =
-                        self.derive_subchunk(chunk, (0, 0), &candidate_code, None);
-                    let candidate_tokens = self
-                        .token_counter
-                        .count(&candidate_chunk.build_embedding_text())?;
+            if new_stmt_start > new_stmt_end { continue; }
+
+            let current_group_len = groups.len();
+
+            match groups.last_mut() {
+                None => {
+                    // First group initialisation
+                    let code = raw_lines[new_stmt_start..=new_stmt_end].join("\n");
+                    let candidate = self.derive_subchunk(chunk, (0, 0), &code, 0);
+                    let tokens = self.token_counter.count(&candidate.build_embedding_text())?;
+                    groups.push((new_stmt_start, new_stmt_end, tokens));
+                }
+                Some((group_start, group_end, cached_tokens)) => {
+                    let candidate_code = raw_lines[*group_start..=new_stmt_end].join("\n");
+
+                    // Index is used inside `self.derive_subchunk()` to determine which child chunk gets doc_comment or comments
+                    // and which child doesn't to avoid duplication.
+                    // Hence the size of a child chunk can vary based on their index.
+                    // Using a child chunk's actual index for lookahead improves code predictability and testing.
+                    let lookahead_idx = if current_group_len == 1 { 0 } else { current_group_len - 1 }; // 0 len is handled in the `None` arm
+                    let candidate_chunk = self.derive_subchunk(chunk, (0,0), &candidate_code, lookahead_idx);
+                    let candidate_tokens = self.token_counter.count(&candidate_chunk.build_embedding_text())?;
 
                     // if new statement pushes group out of the token bound, start a new group
                     // as long as new statement is NOT on the same line with the last group (group_start != new_stmt_start)
-                    if candidate_tokens > self.chunk_token_bound.max_token
-                        && group_start != new_stmt_start
-                    {
-                        groups.push((new_stmt_start, new_stmt_end)); // start new group with new statement
-                    } else {
+                    if candidate_tokens > self.chunk_token_bound.max_token && *group_start != new_stmt_start {
+                        // Start new group, calculate its baseline token
+                        let code = raw_lines[new_stmt_start..=new_stmt_end].join("\n");
+                        let next_idx = current_group_len;
+                        let candidate = self.derive_subchunk(chunk, (0,0), &code, next_idx);
+                        let tokens = self.token_counter.count(&candidate.build_embedding_text())?;
+                        groups.push((new_stmt_start, new_stmt_end, tokens));
+                    }else {
                         // Note new statement may cause an over budget, but is IGNORED added to last group if new statement is
                         // on the same line (group_start == new_stmt_start) instead of starting a new group with duplicated lines.
                         // Duplicated line will affect code slice ownership from overlapping index.
-                        let last = groups.last_mut().unwrap();
-                        last.1 = new_stmt_end; // update last group with new statement
+                        *group_end = new_stmt_end; // Expand existing group
+                        *cached_tokens = candidate_tokens; // update its token cache
                     }
                 }
             }
         }
-
-        let sub_chunks: Vec<CodeChunk> = groups
-            .into_iter()
-            .enumerate()
-            .map(|(i, (start, end))| {
-                let code = raw_lines[start..=end].join("\n");
-                self.derive_subchunk(chunk, (start, end), &code, Some(i))
-            })
-            .collect();
-
+        
+        
         let mut final_chunks = Vec::new();
-        for sub_chunk in sub_chunks {
-            let tokens = self
-                .token_counter
-                .count(&sub_chunk.build_embedding_text())?;
-            if tokens > self.chunk_token_bound.max_token {
+
+        for (i, (start, end, cached_tokens)) in groups.into_iter().enumerate() {
+            let code = raw_lines[start..=end].join("\n");
+            let mut sub_chunk = self.derive_subchunk(chunk, (start, end), &code, i);
+            sub_chunk.token_count = Some(cached_tokens);
+
+            // if the single block itself is natively over-budget, fall back safely
+            if cached_tokens > self.chunk_token_bound.max_token {
                 final_chunks.extend(self.line_window_split(&sub_chunk)?);
-            } else {
+            }else {
                 final_chunks.push(sub_chunk);
             }
         }
-
+        
         Ok(Some(final_chunks))
     }
 
@@ -157,26 +169,28 @@ impl<'a> ChunkSplitter<'a> {
         parent: &CodeChunk,
         scope: (usize, usize),
         code: &str,
-        index: Option<usize>,
+        index: usize,
     ) -> CodeChunk {
         let comment_lines = parent.comments.clone().unwrap_or_default();
         let comment_lines = comment_lines.lines().collect::<Vec<_>>();
         let lines = comment_lines.len();
         let half = if lines > 1 { lines / 2 } else { 0 };
 
-        let sub_comments = if index.is_none() {
-            "".to_string()
-        } else if index == Some(0) {
+        // split regular comments among first and second child.
+        let sub_comments = if index == 0 {
             comment_lines[0..half].join("\n")
-        } else {
+        } else if index == 1 {
             comment_lines[half..].join("\n")
+        } else {
+            "".to_string()
         };
 
         CodeChunk {
             file_path: parent.file_path.clone(),
-            item_name: format!("{}#part{}", parent.item_name, index.unwrap_or_default()),
+            item_name: format!("{}#part{}", parent.item_name, index),
             raw_code: code.to_string(),
-            doc_comment: if index == Some(0) {
+            // Only the first child inherit doc_comment, to avoid duplication and memory consumption.
+            doc_comment: if index == 0 {
                 parent.doc_comment.clone()
             } else {
                 None
@@ -199,6 +213,7 @@ impl<'a> ChunkSplitter<'a> {
                 .saturating_add(scope.1)
                 .min(parent.end_line),
             content_hash: hash_raw_code(code),
+            token_count: None,
         }
     }
 
@@ -216,33 +231,42 @@ impl<'a> ChunkSplitter<'a> {
 
         loop {
             let mut i = 0;
-            let mut splitted_code = vec![];
+            let mut sub_chunks = Vec::new();
+            let mut index = 0;
+
             while i < code_lines.len() {
                 let start = i.saturating_sub(self.chunk_token_bound.overlap_lines);
                 let end = (i + window).min(code_lines.len() - 1);
                 let code = code_lines[start..=end].join("\n");
-                splitted_code.push((code, (start, end)));
+
+                sub_chunks.push(self.derive_subchunk(chunk, (start, end), &code, index));
                 i += window + 1; // Exclude the included =end index from the next window.
+                index += 1;
             }
 
-            let sub_chunks = splitted_code
-                .into_iter()
-                .enumerate()
-                .map(|(i, (s, scope))| self.derive_subchunk(chunk, scope, &s, Some(i)))
-                .collect::<Vec<CodeChunk>>();
+            let all_within_bound = sub_chunks.iter_mut()
+                // .all() short-circuit (breaks out) on the first `false` value and leaves the rest chunk **UNMUTED**
+                // this is because if any chunk is still overbudget we reduce the split window and repeat the process again
+                .all(|c| {
+                    let tokens = self.token_counter.count(&c.build_embedding_text()).unwrap_or(usize::MAX);
+                    c.token_count = Some(tokens);
+                    tokens <= self.chunk_token_bound.max_token
+            });
 
-            let token_counts = sub_chunks
-                .iter()
-                .map(|c| self.token_counter.count(&c.build_embedding_text()))
-                .collect::<Result<Vec<usize>, anyhow::Error>>()?;
-
-            let all_within_bound = token_counts
-                .iter()
-                .all(|&tokens| tokens <= self.chunk_token_bound.max_token);
-
-            if all_within_bound || window <= 1 {
+            if all_within_bound {
                 return Ok(sub_chunks);
             }
+
+            if window <= 1 {
+                // If the split window cannot be further reduced, ONLY THEN do we CONTINUE the mutation of the rest chunk
+                for c in &mut sub_chunks {
+                    if c.token_count.is_none() {
+                        c.token_count = Some(self.token_counter.count(&c.build_embedding_text()).unwrap_or(usize::MAX));
+                    }
+                }
+                
+                return Ok(sub_chunks);
+            } 
 
             window = (window / 2).max(1);
         }
@@ -284,6 +308,7 @@ mod tests {
             doc_comment: Some("Handles an incoming request.".into()),
             comments: Some(String::new()),
             content_hash: String::new(),
+            token_count: None,
         }
     }
 
