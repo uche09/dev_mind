@@ -10,7 +10,7 @@ static TOKENIZER_BYTES: &[u8] =
     include_bytes!("../assets/jina-embeddings-v2-base-code-tokenizer.json");
 
 // The actual MAX_TOKEN for jina-embeddings-v2-base-code model is 8000+
-// pub static MODEL_MAX_TOKEN: usize = 7000; 
+// pub static MODEL_MAX_TOKEN: usize = 7000;
 
 pub trait TokenCounter {
     fn count(&self, text: &str) -> anyhow::Result<usize>;
@@ -102,7 +102,9 @@ impl<'a> ChunkSplitter<'a> {
                 .saturating_sub(2)
                 .min(raw_lines.len().saturating_sub(1));
 
-            if new_stmt_start > new_stmt_end { continue; }
+            if new_stmt_start > new_stmt_end {
+                continue;
+            }
 
             let current_group_len = groups.len();
 
@@ -111,7 +113,9 @@ impl<'a> ChunkSplitter<'a> {
                     // First group initialisation
                     let code = raw_lines[new_stmt_start..=new_stmt_end].join("\n");
                     let candidate = self.derive_subchunk(chunk, (0, 0), &code, 0);
-                    let tokens = self.token_counter.count(&candidate.build_embedding_text())?;
+                    let tokens = self
+                        .token_counter
+                        .count(&candidate.build_embedding_text())?;
                     groups.push((new_stmt_start, new_stmt_end, tokens));
                 }
                 Some((group_start, group_end, cached_tokens)) => {
@@ -121,20 +125,31 @@ impl<'a> ChunkSplitter<'a> {
                     // and which child doesn't to avoid duplication.
                     // Hence the size of a child chunk can vary based on their index.
                     // Using a child chunk's actual index for lookahead improves code predictability and testing.
-                    let lookahead_idx = if current_group_len == 1 { 0 } else { current_group_len - 1 }; // 0 len is handled in the `None` arm
-                    let candidate_chunk = self.derive_subchunk(chunk, (0,0), &candidate_code, lookahead_idx);
-                    let candidate_tokens = self.token_counter.count(&candidate_chunk.build_embedding_text())?;
+                    let lookahead_idx = if current_group_len == 1 {
+                        0
+                    } else {
+                        current_group_len - 1
+                    }; // 0 len is handled in the `None` arm
+                    let candidate_chunk =
+                        self.derive_subchunk(chunk, (0, 0), &candidate_code, lookahead_idx);
+                    let candidate_tokens = self
+                        .token_counter
+                        .count(&candidate_chunk.build_embedding_text())?;
 
                     // if new statement pushes group out of the token bound, start a new group
                     // as long as new statement is NOT on the same line with the last group (group_start != new_stmt_start)
-                    if candidate_tokens > self.chunk_token_bound.max_token && *group_start != new_stmt_start {
+                    if candidate_tokens > self.chunk_token_bound.max_token
+                        && *group_start != new_stmt_start
+                    {
                         // Start new group, calculate its baseline token
                         let code = raw_lines[new_stmt_start..=new_stmt_end].join("\n");
                         let next_idx = current_group_len;
-                        let candidate = self.derive_subchunk(chunk, (0,0), &code, next_idx);
-                        let tokens = self.token_counter.count(&candidate.build_embedding_text())?;
+                        let candidate = self.derive_subchunk(chunk, (0, 0), &code, next_idx);
+                        let tokens = self
+                            .token_counter
+                            .count(&candidate.build_embedding_text())?;
                         groups.push((new_stmt_start, new_stmt_end, tokens));
-                    }else {
+                    } else {
                         // Note new statement may cause an over budget, but is IGNORED added to last group if new statement is
                         // on the same line (group_start == new_stmt_start) instead of starting a new group with duplicated lines.
                         // Duplicated line will affect code slice ownership from overlapping index.
@@ -144,8 +159,7 @@ impl<'a> ChunkSplitter<'a> {
                 }
             }
         }
-        
-        
+
         let mut final_chunks = Vec::new();
 
         for (i, (start, end, cached_tokens)) in groups.into_iter().enumerate() {
@@ -156,11 +170,11 @@ impl<'a> ChunkSplitter<'a> {
             // if the single block itself is natively over-budget, fall back safely
             if cached_tokens > self.chunk_token_bound.max_token {
                 final_chunks.extend(self.line_window_split(&sub_chunk)?);
-            }else {
+            } else {
                 final_chunks.push(sub_chunk);
             }
         }
-        
+
         Ok(Some(final_chunks))
     }
 
@@ -246,14 +260,18 @@ impl<'a> ChunkSplitter<'a> {
                 index += 1;
             }
 
-            let all_within_bound = sub_chunks.iter_mut()
+            let all_within_bound = sub_chunks
+                .iter_mut()
                 // .all() short-circuit (breaks out) on the first `false` value and leaves the rest chunk **UNMUTED**
                 // this is because if any chunk is still overbudget we reduce the split window and repeat the process again
                 .all(|c| {
-                    let tokens = self.token_counter.count(&c.build_embedding_text()).unwrap_or(usize::MAX);
+                    let tokens = self
+                        .token_counter
+                        .count(&c.build_embedding_text())
+                        .unwrap_or(usize::MAX);
                     c.token_count = Some(tokens);
                     tokens <= self.chunk_token_bound.max_token
-            });
+                });
 
             if all_within_bound {
                 return Ok(sub_chunks);
@@ -263,12 +281,16 @@ impl<'a> ChunkSplitter<'a> {
                 // If the split window cannot be further reduced, ONLY THEN do we CONTINUE the mutation of the rest chunk
                 for c in &mut sub_chunks {
                     if c.token_count.is_none() {
-                        c.token_count = Some(self.token_counter.count(&c.build_embedding_text()).unwrap_or(usize::MAX));
+                        c.token_count = Some(
+                            self.token_counter
+                                .count(&c.build_embedding_text())
+                                .unwrap_or(usize::MAX),
+                        );
                     }
                 }
-                
+
                 return Ok(sub_chunks);
-            } 
+            }
 
             window = (window / 2).max(1);
         }

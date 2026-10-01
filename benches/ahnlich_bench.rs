@@ -9,9 +9,11 @@
 //
 // Run with: cargo bench --bench ahnlich_bench
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use devmind::embeddings::ahnlich::CodeIndex;
-use devmind::indexer::{group_by_token_budget, index_batches_bounded, TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH};
+use devmind::indexer::{
+    TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH, group_by_token_budget, index_batches_bounded,
+};
 use devmind::parser::chunk::{ChunkTokenBound, CodeChunk};
 use devmind::parser::parse_file;
 use devmind::parser::tokenizer::{ChunkSplitter, HuggingFaceCounter};
@@ -106,25 +108,28 @@ fn bench_indexing_strategies(c: &mut Criterion) {
     // Baseline: one `Set` call per chunk, no batching, no grouping.
     // Still the right reference point: everything else should be judged
     // against "what if we did the simplest possible thing."
-    group.bench_function(BenchmarkId::new("strategy", "sequential_single_calls"), |b| {
-        b.to_async(&rt).iter_custom(|iters| {
-            let index = Arc::clone(&index);
-            let chunks = chunks.clone();
-            async move {
-                let mut total = Duration::ZERO;
-                for _ in 0..iters {
-                    reset_store(&index).await; // setup: not timed
+    group.bench_function(
+        BenchmarkId::new("strategy", "sequential_single_calls"),
+        |b| {
+            b.to_async(&rt).iter_custom(|iters| {
+                let index = Arc::clone(&index);
+                let chunks = chunks.clone();
+                async move {
+                    let mut total = Duration::ZERO;
+                    for _ in 0..iters {
+                        reset_store(&index).await; // setup: not timed
 
-                    let start = Instant::now(); // routine: timed
-                    for chunk in &chunks {
-                        index.add_chuck(chunk).await.unwrap();
+                        let start = Instant::now(); // routine: timed
+                        for chunk in &chunks {
+                            index.add_chuck(chunk).await.unwrap();
+                        }
+                        total += start.elapsed();
                     }
-                    total += start.elapsed();
+                    total
                 }
-                total
-            }
-        });
-    });
+            });
+        },
+    );
 
     // Token-budgeted batching (the current real strategy), swept across
     // concurrency = 1, 2, 3. Grouping itself (group_by_token_budget) is
@@ -132,7 +137,10 @@ fn bench_indexing_strategies(c: &mut Criterion) {
     // region per iteration; it's not what we're measuring.
     for concurrency in [1usize, 2, 3] {
         group.bench_function(
-            BenchmarkId::new("strategy", format!("token_budgeted_concurrency_{concurrency}")),
+            BenchmarkId::new(
+                "strategy",
+                format!("token_budgeted_concurrency_{concurrency}"),
+            ),
             |b| {
                 b.to_async(&rt).iter_custom(|iters| {
                     let index = Arc::clone(&index);
@@ -142,13 +150,15 @@ fn bench_indexing_strategies(c: &mut Criterion) {
                         for _ in 0..iters {
                             reset_store(&index).await;
 
-                            let batches =
-                                group_by_token_budget(chunks.clone(), TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH, MAX_BATCH_LEN)
-                                    .unwrap();
+                            let batches = group_by_token_budget(
+                                chunks.clone(),
+                                TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH,
+                                MAX_BATCH_LEN,
+                            )
+                            .unwrap();
 
                             let start = Instant::now();
-                            index_batches_bounded(Arc::clone(&index), batches, concurrency)
-                                .await;
+                            index_batches_bounded(Arc::clone(&index), batches, concurrency).await;
                             total += start.elapsed();
                         }
                         total

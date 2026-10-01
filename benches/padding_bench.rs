@@ -9,7 +9,7 @@
 // differs, one uniform, one skewed.
 //
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use devmind::embeddings::ahnlich::CodeIndex;
 use devmind::parser::chunk::{ChunkKind, CodeChunk};
 use devmind::parser::tokenizer::{HuggingFaceCounter, TokenCounter};
@@ -108,7 +108,10 @@ fn bench_batch_composition(c: &mut Criterion) {
     println!("skewed batch token sum:  {skewed_sum}");
     println!(
         "skewed batch member tokens: {:?}",
-        skewed_batch.iter().map(|c| c.token_count).collect::<Vec<_>>()
+        skewed_batch
+            .iter()
+            .map(|c| c.token_count)
+            .collect::<Vec<_>>()
     );
 
     let mut group = c.benchmark_group("batch_composition");

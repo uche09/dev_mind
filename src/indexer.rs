@@ -1,9 +1,8 @@
-use crate::{embeddings::ahnlich::CodeIndex};
+use crate::embeddings::ahnlich::CodeIndex;
 use crate::parser::chunk::CodeChunk;
 use anyhow::Result;
 use futures::stream::{self, StreamExt};
 use std::sync::Arc;
-
 
 pub static TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH: usize = 1500;
 
@@ -26,9 +25,7 @@ pub async fn index_batches_bounded(
         .map(move |(i, batch)| {
             let index = Arc::clone(&index);
             let batch_len = batch.len();
-            async move {
-                (i, batch_len, index.add_chunks_batch(&batch).await)
-            }
+            async move { (i, batch_len, index.add_chunks_batch(&batch).await) }
         })
         .buffer_unordered(concurrency)
         .collect()
