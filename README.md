@@ -13,6 +13,7 @@ DevMind traverses a Rust repository, extracts meaningful code constructs (functi
 ## Features
 
 - Fast repository traversal and language-aware chunking.
+- Token-aware chunk splitting: oversized functions, structs, and impls are automatically bounded to fit the embedding model's context window, so large or generated files don't crash indexing.
 - Local, lightweight vector store backed by Ahnlich (Docker available).
 - Layered configuration: one global default plus per-project overrides, so you set your Ahnlich address once and reuse it across every repo.
 - CLI-first UX for indexing, querying, and inspecting results.
@@ -24,7 +25,9 @@ DevMind traverses a Rust repository, extracts meaningful code constructs (functi
 - **Configuration:** [devmind.example.toml](devmind.example.toml), [src/config.rs](src/config.rs)
 - **CLI:** [src/cli/mod.rs](src/cli/mod.rs)
 - **Parser / chunker:** [src/parser/mod.rs](src/parser/mod.rs) and [src/parser/chunk.rs](src/parser/chunk.rs)
+- **Token-bound splitting:** [src/parser/tokenizer.rs](src/parser/tokenizer.rs)
 - **Embeddings & storage:** [src/embeddings/mod.rs](src/embeddings/mod.rs) and [src/embeddings/ahnlich.rs](src/embeddings/ahnlich.rs)
+- **Indexing & batching:** [src/indexer.rs](src/indexer.rs)
 - **Search primitives:** [src/search/mod.rs](src/search/mod.rs)
 - **Utilities:** [src/utils/mod.rs](src/utils/mod.rs)
 
@@ -34,8 +37,9 @@ Architecture (high level)
 graph TD
   Repo["Repository files"] --> Parser["Parser"]
   Parser --> Chunker["Chunker"]
-  Chunker --> Embeddings["Embeddings"]
-  Embeddings --> Ahnlich["Ahnlich (store/index)"]
+  Chunker --> Splitter["Token-bound splitter"]
+  Splitter --> Batcher["Token-budget batching"]
+  Batcher --> Ahnlich["Ahnlich (embeds + stores)"]
   Ahnlich --> CLI["Search API / CLI"]
 ```
 
@@ -187,7 +191,9 @@ You rarely need to hand-edit either file, `devmind config init` and its flags co
 ## Developer notes
 
 - Parser: [src/parser](src/parser/mod.rs) handles traversing and chunk boundaries.
+- Token-bound splitting: [src/parser/tokenizer.rs](src/parser/tokenizer.rs) caps each chunk to the embedding model's max input size, splitting oversized constructs along statement boundaries first, then falling back to line windows splitting for anything still too dense.
 - Embeddings: [src/embeddings/ahnlich.rs](src/embeddings/ahnlich.rs) contains client glue using `ahnlich_client_rs`.
+- Indexing & batching: [src/indexer.rs](src/indexer.rs) groups bounded chunks into token-budgeted batches and dispatches them to Ahnlich.
 - Config loader and layered merge logic: [src/config.rs](src/config.rs).
 
 ## Contributing
@@ -204,10 +210,18 @@ cargo clippy -- -D warnings
 cargo test --all
 ```
 
+Three benchmark suites live under `benches/`. `parsing_bench` is pure CPU-bound parsing and runs anywhere. `ahnlich_bench` and `padding_bench` are integration benchmarks, they need a running Ahnlich instance and make real embedding calls, so they're slower and not meant for every CI run:
+
+```bash
+cargo bench --bench parsing_bench   # no Ahnlich required
+cargo bench --bench ahnlich_bench   # requires `docker compose -f ahnlich-docker-compose.yml up`
+cargo bench --bench padding_bench   # requires `docker compose -f ahnlich-docker-compose.yml up`
+```
+
 <!-- ## Roadmap
 
-- Add end-to-end integration tests against a local Ahnlich instance.
-- Improve chunking heuristics for macro-heavy and generated code. -->
+- Make token-bound splitting and batching settings (max tokens per chunk, batch size, concurrency) configurable via devmind.toml instead of hardcoded constants.
+- Convert ahnlich_bench / padding_bench into proper end-to-end integration tests, not just benchmarks, so regressions fail CI instead of only showing up in manual runs. -->
 
 See `ahnlich_client_rs` and `ahnlich_types` in `Cargo.toml` for the embedding/store integration.
 

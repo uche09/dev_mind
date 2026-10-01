@@ -4,7 +4,7 @@ use anyhow::Result;
 use futures::stream::{self, StreamExt};
 use std::sync::Arc;
 
-pub static TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH: usize = 1500;
+pub static TOKEN_THRESHOLD_FOR_SINGLE_PER_BATCH: usize = 1500;
 
 /// Takes a LIST of `CodeChunk` batches and convert it to a STREAM of batches for async processing
 /// then sends each group as a single Ahnlich `Set` call (via `CodeIndex::add_chunks_batch`), running
