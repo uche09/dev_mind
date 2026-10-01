@@ -12,7 +12,7 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use devmind::embeddings::ahnlich::CodeIndex;
 use devmind::indexer::{
-    TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH, group_by_token_budget, index_batches_bounded,
+    TOKEN_THRESHOLD_FOR_SINGLE_PER_BATCH, group_by_token_budget, index_batches_bounded,
 };
 use devmind::parser::chunk::{ChunkTokenBound, CodeChunk};
 use devmind::parser::parse_file;
@@ -152,7 +152,7 @@ fn bench_indexing_strategies(c: &mut Criterion) {
 
                             let batches = group_by_token_budget(
                                 chunks.clone(),
-                                TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH,
+                                TOKEN_THRESHOLD_FOR_SINGLE_PER_BATCH,
                                 MAX_BATCH_LEN,
                             )
                             .unwrap();

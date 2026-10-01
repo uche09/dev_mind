@@ -74,7 +74,6 @@ async fn main() -> anyhow::Result<()> {
                 .progress_chars("=>-"),
             );
 
-            
             let mut total_chunks = 0usize;
             let mut error_embeddings = vec![];
             let token_counter = HuggingFaceCounter::from_embedded()?;
@@ -101,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
 
                 let batches_by_token_budget = group_by_token_budget(
                     bounded_chunks,
-                    indexer::TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH,
+                    indexer::TOKEN_THRESHOLD_FOR_SINGLE_PER_BATCH,
                     4,
                 )?;
                 let results = index_batches_bounded(
@@ -132,7 +131,6 @@ async fn main() -> anyhow::Result<()> {
                 "\nIndexed {total_chunks} chunks across {} files. Encountered error while indexing {} batch(es).",
                 rust_files.len(), error_embeddings.len()
             ));
-            
         }
         Commands::Ask { query, n } => {
             let query = query.trim();
