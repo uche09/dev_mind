@@ -1,18 +1,22 @@
-Benchmarking against 40 real chunks from this project
-ahnlich_indexing/strategy/sequential_single_calls
-                        time:   [12.496 s 13.643 s 14.907 s]
-                        change: [+2.6323% +12.643% +22.549%] (p = 0.03 < 0.05)
-                        Performance has regressed.
-ahnlich_indexing/strategy/batched_no_concurrency
-                        time:   [23.983 s 24.714 s 25.571 s]
-                        change: [+2.6384% +8.0638% +14.014%] (p = 0.01 < 0.05)
-                        Performance has regressed.
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
-ahnlich_indexing/strategy/batched_bounded_concurrency_3
-                        time:   [23.881 s 24.167 s 24.503 s]
-                        change: [-2.4373% +0.3363% +3.8399%] (p = 0.86 > 0.05)
-                        No change in performance detected.
+Benchmarking against 40 bounded chunks from this project
+Benchmarking ahnlich_indexing/strategy/sequential_single_calls: Collecting 10 samples in estimatahnlich_indexing/strategy/sequential_single_calls
+                        time:   [27.195 s 27.493 s 27.788 s]
+                        change: [-3.7815% -2.3923% -1.0174%] (p = 0.01 < 0.05)
+                        Performance has improved.
+
+Benchmarking ahnlich_indexing/strategy/token_budgeted_concurrency_1: Collecting 10 samples in esahnlich_indexing/strategy/token_budgeted_concurrency_1
+                        time:   [30.201 s 30.375 s 30.596 s]
+                        change: [-3.5007% -2.7536% -1.9698%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Found 1 outliers among 10 measurements (10.00%)
   1 (10.00%) high mild
 
+Benchmarking ahnlich_indexing/strategy/token_budgeted_concurrency_2: Collecting 10 samples in esahnlich_indexing/strategy/token_budgeted_concurrency_2
+                        time:   [30.159 s 30.472 s 30.810 s]
+                        change: [-28.394% -16.923% -2.3286%] (p = 0.03 < 0.05)
+                        Performance has improved.
+
+Benchmarking ahnlich_indexing/strategy/token_budgeted_concurrency_3: Collecting 10 samples in esahnlich_indexing/strategy/token_budgeted_concurrency_3
+                        time:   [29.713 s 29.985 s 30.253 s]
+                        change: [-42.838% -42.205% -41.606%] (p = 0.00 < 0.05)
+                        Performance has improved.
