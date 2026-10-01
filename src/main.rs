@@ -3,17 +3,16 @@ use clap::Parser;
 use colored::*;
 use devmind::cli::{self, Cli, Commands, ConfigOptions};
 use devmind::config::Config;
-use devmind::embeddings;
 use devmind::indexer::{group_by_token_budget, index_batches_bounded};
 use devmind::parser::chunk::{ChunkTokenBound, CodeChunk};
-use devmind::parser::tokenizer::{self, ChunkSplitter, HuggingFaceCounter};
+use devmind::parser::tokenizer::{ChunkSplitter, HuggingFaceCounter};
 use devmind::parser::{
     self,
     traverser::{build_ignore_set, collect_rust_files},
 };
+use devmind::{embeddings, indexer};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 use tokio::main;
 
 #[main]
@@ -63,7 +62,6 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", "created store successfuly".green());
         }
         Commands::Index { path } => {
-            let index_ops_start = Instant::now();
             let ignore = build_ignore_set(&conf.ignore)?;
             let rust_files = collect_rust_files(&path.to_string_lossy(), &ignore)?;
             let progress_bar = ProgressBar::new(rust_files.len() as u64);
@@ -76,22 +74,14 @@ async fn main() -> anyhow::Result<()> {
                 .progress_chars("=>-"),
             );
 
-            // Reset the peak counter *here*, right before the actual indexing
-            // work starts, so connection setup / arg parsing isn't counted
-            // toward the number we care about.
-            #[cfg(feature = "mem_profile")]
-            devmind::memtrack::reset_peak();
-
+            
             let mut total_chunks = 0usize;
             let mut error_embeddings = vec![];
             let token_counter = HuggingFaceCounter::from_embedded()?;
             let splitter = ChunkSplitter::new(&token_counter, ChunkTokenBound::default());
-            let mut file_parsing_duration = Duration::default();
-            let mut ahnlich_call_duration_per_file = Duration::default();
 
             for file in &rust_files {
                 progress_bar.set_message(file.to_owned());
-                let start_file_parsing = Instant::now();
                 let raw_chunks = parser::parse_file(file)?;
 
                 let mut bounded_chunks: Vec<CodeChunk> = Vec::new();
@@ -109,12 +99,17 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
 
-                file_parsing_duration += start_file_parsing.elapsed();
-                let start_ahnlich_calls_per_file = Instant::now();
-                let batches_by_token_budget = group_by_token_budget(bounded_chunks, tokenizer::MODEL_MAX_TOKEN, 4)?;
-                let results =
-                    index_batches_bounded(Arc::clone(&ahnlich_ai_proxy), batches_by_token_budget, 1)
-                        .await;
+                let batches_by_token_budget = group_by_token_budget(
+                    bounded_chunks,
+                    indexer::TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH,
+                    4,
+                )?;
+                let results = index_batches_bounded(
+                    Arc::clone(&ahnlich_ai_proxy),
+                    batches_by_token_budget,
+                    1,
+                )
+                .await;
 
                 for (batch_idx, batch_size, res) in results {
                     if let Err(e) = res {
@@ -126,7 +121,6 @@ async fn main() -> anyhow::Result<()> {
 
                     total_chunks += batch_size;
                 }
-                ahnlich_call_duration_per_file += start_ahnlich_calls_per_file.elapsed();
                 progress_bar.inc(1);
             }
 
@@ -135,30 +129,10 @@ async fn main() -> anyhow::Result<()> {
             }
 
             progress_bar.finish_with_message(format!(
-                "Indexed {total_chunks} chunks across {} files. Encountered error while indexing {}.\
-                \n\nIndexing time: {}ms",
-                rust_files.len(), error_embeddings.len(), index_ops_start.elapsed().as_millis()
+                "\nIndexed {total_chunks} chunks across {} files. Encountered error while indexing {} batch(es).",
+                rust_files.len(), error_embeddings.len()
             ));
-
-            println!(
-                "Average Time For:\
-                \nFile parsing = {}ms\
-                \nAhnlich call per file = {}ms\
-                \nAhnlich call per chunk = \"{}ms\" (batch processing)",
-                file_parsing_duration.as_millis() / rust_files.len() as u128,
-                ahnlich_call_duration_per_file.as_millis() / rust_files.len() as u128,
-                ahnlich_call_duration_per_file.as_millis() / total_chunks as u128
-            );
-
-            #[cfg(feature = "mem_profile")]
-            println!(
-                "{}",
-                format!(
-                    "Peak heap allocated during indexing: {}",
-                    devmind::memtrack::human_bytes(devmind::memtrack::peak_bytes())
-                )
-                .cyan()
-            );
+            
         }
         Commands::Ask { query, n } => {
             let query = query.trim();

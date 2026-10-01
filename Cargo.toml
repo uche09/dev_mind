@@ -19,8 +19,10 @@ harness = false
 name = "ahnlich_bench"
 harness = false
 
-[features]
-mem_profile = []
+[[bench]]
+name = "padding_bench"
+harness = false
+
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

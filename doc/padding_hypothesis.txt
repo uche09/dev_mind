@@ -1,0 +1,22 @@
+uniform batch token sum: 7000
+skewed batch token sum:  6949
+skewed batch member tokens: [Some(6016), Some(311), Some(311), Some(311)]
+batch_composition/composition/uniform_4x1750
+                        time:   [18.999 s 20.581 s 21.994 s]
+
+
+Benchmarking batch_composition/composition/skewed_6000_plus_3x300
+Benchmarking batch_composition/composition/skewed_6000_plus_3x300: Warming up for 3.0000 s
+
+// ahnlich-ai container died at this point //
+
+thread 'main' (99497) panicked at benches/padding_bench.rs:143:62:
+called `Result::unwrap()` on an `Err` value: Server error status: Unknown, message: "transport error", details: [], metadata: MetadataMap { headers: {} }
+
+Caused by:
+    0: status: Unknown, message: "transport error", details: [], metadata: MetadataMap { headers: {} }
+    1: transport error
+    2: connection error
+    3: stream closed because of a broken pipe
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: bench failed, to rerun pass `--bench padding_bench`

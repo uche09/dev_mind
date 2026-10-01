@@ -1,0 +1,7 @@
+Connected to ahnlich
+Average Time For:
+File parsing = 73ms
+Ahnlich call per file = 8097ms
+Ahnlich call per chunk = "705ms" (batch processing)
+
+Indexing time: 1348615ms
