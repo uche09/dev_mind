@@ -10,7 +10,7 @@ static TOKENIZER_BYTES: &[u8] =
     include_bytes!("../assets/jina-embeddings-v2-base-code-tokenizer.json");
 
 // The actual MAX_TOKEN for jina-embeddings-v2-base-code model is 8000+
-pub static MODEL_MAX_TOKEN: usize = 7000; //
+// pub static MODEL_MAX_TOKEN: usize = 7000; 
 
 pub trait TokenCounter {
     fn count(&self, text: &str) -> anyhow::Result<usize>;

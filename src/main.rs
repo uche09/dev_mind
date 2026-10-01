@@ -3,10 +3,10 @@ use clap::Parser;
 use colored::*;
 use devmind::cli::{self, Cli, Commands, ConfigOptions};
 use devmind::config::Config;
-use devmind::embeddings;
+use devmind::{embeddings, indexer};
 use devmind::indexer::{group_by_token_budget, index_batches_bounded};
 use devmind::parser::chunk::{ChunkTokenBound, CodeChunk};
-use devmind::parser::tokenizer::{self, ChunkSplitter, HuggingFaceCounter};
+use devmind::parser::tokenizer::{ChunkSplitter, HuggingFaceCounter};
 use devmind::parser::{
     self,
     traverser::{build_ignore_set, collect_rust_files},
@@ -111,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
 
                 file_parsing_duration += start_file_parsing.elapsed();
                 let start_ahnlich_calls_per_file = Instant::now();
-                let batches_by_token_budget = group_by_token_budget(bounded_chunks, tokenizer::MODEL_MAX_TOKEN, 4)?;
+                let batches_by_token_budget = group_by_token_budget(bounded_chunks, indexer::TOEKN_THRESHOLD_FOR_SINGLE_PER_BATCH, 4)?;
                 let results =
                     index_batches_bounded(Arc::clone(&ahnlich_ai_proxy), batches_by_token_budget, 1)
                         .await;
