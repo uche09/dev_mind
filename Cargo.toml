@@ -23,8 +23,6 @@ harness = false
 name = "padding_bench"
 harness = false
 
-[features]
-mem_profile = []
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
